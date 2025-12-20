@@ -2838,4 +2838,39 @@ mod tests {
         let result = stage.execute(event).unwrap();
         assert!(result.is_some());
     }
+
+    #[test]
+    fn test_replay_execution() {
+        use tempfile::NamedTempFile;
+        use crate::replay::{record_execution, replay_execution};
+
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+        pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+
+        let events = vec![
+            Event {
+                data: serde_json::json!({"level": "info", "message": "test1", "extra": "ignored"}),
+                metadata: None,
+            },
+            Event {
+                data: serde_json::json!({"level": "error", "message": "test2"}),
+                metadata: None,
+            },
+        ];
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let trace_path = temp_file.path();
+
+        // Record execution
+        record_execution(&mut pipeline, &events, trace_path).unwrap();
+
+        // Create fresh pipeline for replay
+        let mut replay_pipeline = Pipeline::new();
+        replay_pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+        replay_pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+
+        // Replay and verify
+        replay_execution(&mut replay_pipeline, trace_path).unwrap();
+    }
 }

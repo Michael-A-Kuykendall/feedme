@@ -1,6 +1,6 @@
 [package]
 name = "feedme"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "Deterministic streaming data pipeline with mechanical guarantees for Rust"
@@ -34,6 +34,7 @@ regex = "1.0"
 invariant-ppt = []
 
 [dev-dependencies]
+criterion = "0.8.1"
 tempfile = "3.0"
 
 [[example]]
