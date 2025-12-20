@@ -2,3 +2,4 @@
 {"data":{"category":"Validation","code":"MISSING_FIELD","error":"pipeline","message":"Missing required field: level","raw":"{\"message\":\"Missing level\"}","stage":"RequiredFields"},"metadata":null}
 {"data":{"category":"Validation","code":"MISSING_FIELD","error":"pipeline","message":"Missing required field: level","raw":"{\"message\":\"Missing level\"}","stage":"RequiredFields"},"metadata":null}
 {"data":{"category":"Validation","code":"MISSING_FIELD","error":"pipeline","message":"Missing required field: level","raw":"{\"message\":\"Missing level\"}","stage":"RequiredFields"},"metadata":null}
+{"data":{"category":"Validation","code":"MISSING_FIELD","error":"pipeline","message":"Missing required field: level","raw":"{\"message\":\"Missing level\"}","stage":"RequiredFields"},"metadata":null}

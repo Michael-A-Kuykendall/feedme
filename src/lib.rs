@@ -130,7 +130,7 @@ impl Event {
 
 /// Error taxonomy for pipeline failures.
 /// Explicit category, stage attribution, machine-readable code.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipelineError {
     Parse(ParseError),
     Transform(TransformError),
@@ -195,7 +195,7 @@ impl PipelineError {
 
 impl std::error::Error for PipelineError {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ParseErrorCode {
     ParseError,
     Utf8Error,
@@ -214,14 +214,14 @@ impl fmt::Display for ParseErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParseError {
     pub stage: String,
     pub code: ParseErrorCode,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransformErrorCode {
     MissingField,
     TypeMismatch,
@@ -240,14 +240,14 @@ impl fmt::Display for TransformErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransformError {
     pub stage: String,
     pub code: TransformErrorCode,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ValidationErrorCode {
     MissingField,
     TypeMismatch,
@@ -266,14 +266,14 @@ impl fmt::Display for ValidationErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationError {
     pub stage: String,
     pub code: ValidationErrorCode,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OutputErrorCode {
     SerializeError,
     IoError,
@@ -290,14 +290,14 @@ impl fmt::Display for OutputErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputError {
     pub stage: String,
     pub code: OutputErrorCode,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SystemErrorCode {
     IoError,
     Test,
@@ -312,7 +312,7 @@ impl fmt::Display for SystemErrorCode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemError {
     pub stage: String,
     pub code: SystemErrorCode,
@@ -1918,6 +1918,36 @@ mod tests {
     }
 
     #[test]
+    fn test_error_code_display_implementations() {
+        // Test ParseErrorCode display
+        assert_eq!(format!("{}", ParseErrorCode::ParseError), "PARSE_ERROR");
+        assert_eq!(format!("{}", ParseErrorCode::Utf8Error), "UTF8_ERROR");
+        assert_eq!(format!("{}", ParseErrorCode::JsonError), "JSON_ERROR");
+        assert_eq!(format!("{}", ParseErrorCode::Test), "TEST");
+
+        // Test TransformErrorCode display
+        assert_eq!(format!("{}", TransformErrorCode::MissingField), "MISSING_FIELD");
+        assert_eq!(format!("{}", TransformErrorCode::TypeMismatch), "TYPE_MISMATCH");
+        assert_eq!(format!("{}", TransformErrorCode::ConstraintViolation), "CONSTRAINT_VIOLATION");
+        assert_eq!(format!("{}", TransformErrorCode::Test), "TEST");
+
+        // Test ValidationErrorCode display
+        assert_eq!(format!("{}", ValidationErrorCode::MissingField), "MISSING_FIELD");
+        assert_eq!(format!("{}", ValidationErrorCode::TypeMismatch), "TYPE_MISMATCH");
+        assert_eq!(format!("{}", ValidationErrorCode::ConstraintViolation), "CONSTRAINT_VIOLATION");
+        assert_eq!(format!("{}", ValidationErrorCode::Test), "TEST");
+
+        // Test OutputErrorCode display
+        assert_eq!(format!("{}", OutputErrorCode::SerializeError), "SERIALIZE_ERROR");
+        assert_eq!(format!("{}", OutputErrorCode::IoError), "IO_ERROR");
+        assert_eq!(format!("{}", OutputErrorCode::Test), "TEST");
+
+        // Test SystemErrorCode display
+        assert_eq!(format!("{}", SystemErrorCode::IoError), "IO_ERROR");
+        assert_eq!(format!("{}", SystemErrorCode::Test), "TEST");
+    }
+
+    #[test]
     fn test_input_source_directory() {
         use std::fs;
         use std::io::Write;
@@ -2872,5 +2902,71 @@ mod tests {
 
         // Replay and verify
         replay_execution(&mut replay_pipeline, trace_path).unwrap();
+    }
+
+    #[test]
+    fn test_pipeline_export_json_metrics() {
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string()])));
+
+        let event = Event {
+            data: serde_json::json!({"level": "info", "message": "test"}),
+            metadata: None,
+        };
+
+        pipeline.process_event(event).unwrap();
+        let metrics = pipeline.export_json_logs();
+        assert!(!metrics.is_empty());
+        assert!(metrics[0].contains("events_processed"));
+    }
+
+    #[test]
+    fn test_pipeline_export_prometheus_metrics() {
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string()])));
+
+        let event = Event {
+            data: serde_json::json!({"level": "info", "message": "test"}),
+            metadata: None,
+        };
+
+        pipeline.process_event(event).unwrap();
+        let prometheus = pipeline.export_prometheus();
+        assert!(prometheus.contains("# HELP"));
+        assert!(prometheus.contains("feedme_events_processed_total"));
+    }
+
+    #[test]
+    fn test_metrics_drop_reasons() {
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(Filter::new(Box::new(|e| {
+            e.get_string("level") == Some("error")
+        }))));
+        pipeline.add_stage(Box::new(StdoutOutput::new()));
+
+        // This event should be filtered out
+        let info_event = Event {
+            data: serde_json::json!({"level": "info", "message": "test"}),
+            metadata: None,
+        };
+        let result = pipeline.process_event(info_event).unwrap();
+        assert!(result.is_none());
+
+        // Check that drop reason is tracked
+        let prometheus = pipeline.export_prometheus();
+        assert!(prometheus.contains("feedme_events_dropped_total 1"));
+    }
+
+    #[test]
+    fn test_pipeline_error_serialization() {
+        let error = PipelineError::Parse(ParseError {
+            stage: "TestStage".to_string(),
+            code: ParseErrorCode::JsonError,
+            message: "Test error message".to_string(),
+        });
+
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: PipelineError = serde_json::from_str(&json).unwrap();
+        assert_eq!(format!("{:?}", error), format!("{:?}", deserialized));
     }
 }

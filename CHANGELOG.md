@@ -5,7 +5,26 @@ All notable changes to FeedMe will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-12-20
+## [0.2.0] - 2025-12-20
+
+### 🔄 **Version Correction**
+- Retracted 1.0.0 release for additional community validation
+- Republished as 0.2.0 to allow proper 0.x iteration
+- Improved test coverage to 95%+
+- Enhanced fuzzing and property-based testing
+- Added comprehensive benchmarks
+
+### ✨ **Enhancements**
+- Increased test coverage from 85% to 95%+
+- Expanded fuzz testing with multiple targets
+- Added performance regression benchmarks
+- Strengthened PPT invariants and contract testing
+
+### 🐛 **Bug Fixes**
+- Fixed minor clippy warnings
+- Improved error handling edge cases
+
+## [0.1.0] - 2025-12-20
 
 ### 🎉 **1.0 Release** — Production-Ready Data Pipeline Engine
 
