@@ -59,13 +59,13 @@ FeedMe is intentionally **not** these things, and that's by design. Here's why:
 FeedMe runs in a single process with no networking, coordination, or cluster management. This eliminates complexity from consensus, partitioning, and network failures. If you need distributed processing, FeedMe can be a building block within a larger system, but it doesn't handle distribution itself.
 
 ### Not Stateful (like traditional ETL tools)
-Stages are pure functions: given the same input and configuration, they produce the same output. No persistent state, no side effects, no database connections. This makes pipelines predictable, testable, and easy to reason about—perfect for "data plumbing" where state management belongs at the edges.
+Stages should be deterministic: given the same input and configuration, they produce the same output. The framework does not introduce concurrency or hidden state—stages are responsible for their own determinism. This makes pipelines predictable, testable, and easy to reason about—perfect for "data plumbing" where state management belongs at the edges.
 
 ### Not Async-First (like many modern Rust libraries)
 Processing is synchronous by default. Async is an implementation detail for I/O-bound stages, not the core API. This keeps the mental model simple: a pipeline is a sequence of transformations, not a graph of futures. If you need high-concurrency async processing, FeedMe integrates cleanly but doesn't force it.
 
 ### Not a DSL (like Logstash)
-No embedded languages, no configuration files, no YAML pipelines. Just Rust code. This means you get compile-time safety, IDE support, and the full power of Rust's type system. DSLs are great for non-programmers, but they hide complexity and limit expressiveness—FeedMe assumes you're writing code.
+No embedded languages, no required configuration files. Code-first design with optional YAML support for complex configurations. This means you get compile-time safety, IDE support, and the full power of Rust's type system—while still supporting declarative configuration when needed. DSLs are great for non-programmers, but they hide complexity and limit expressiveness—FeedMe assumes you're writing code, but provides YAML as an optional convenience.
 
 ### Not a Daemon (like filebeat)
 No long-running services, no background processes, no auto-restart. FeedMe is designed for batch processing and streaming pipelines that you control. It's a library you embed in your application, not a tool you deploy separately. This keeps deployment simple and resource usage predictable.
@@ -78,7 +78,7 @@ FeedMe enforces **12 non-negotiable behavioral guarantees** that are tested mech
 
 ## Features
 
-- 🚀 **High Performance**: Zero-copy streaming processing
+- 🚀 **High Performance**: Streaming processing with bounded memory usage
 - 🔒 **Memory Safe**: Bounded resource usage prevents memory leaks
 - 🎯 **Deterministic**: Consistent output for identical inputs
 - 📊 **Observable**: Built-in metrics and monitoring

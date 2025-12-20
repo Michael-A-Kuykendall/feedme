@@ -5,3 +5,9 @@ Cargo.lock
 .vscode/
 archive/
 *.zip
+*.tar.gz
+*.html
+.claude/
+.copilot/
+**/.claude/
+**/.copilot/
