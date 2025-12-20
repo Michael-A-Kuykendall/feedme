@@ -7,7 +7,10 @@ pub struct AddEnv;
 impl Stage for AddEnv {
     fn execute(&mut self, mut event: Event) -> Result<Option<Event>, PipelineError> {
         if let serde_json::Value::Object(ref mut map) = event.data {
-            map.insert("env".to_string(), serde_json::Value::String("prod".to_string()));
+            map.insert(
+                "env".to_string(),
+                serde_json::Value::String("prod".to_string()),
+            );
         }
         Ok(Some(event))
     }

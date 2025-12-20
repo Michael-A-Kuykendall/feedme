@@ -17,7 +17,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])));
 
     // Output to file
-    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from("samples/projected.ndjson"))));
+    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from(
+        "samples/projected.ndjson",
+    ))));
 
     // Process input file
     let mut input = InputSource::File(PathBuf::from("samples/messy.ndjson"));

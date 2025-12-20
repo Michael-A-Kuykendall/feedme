@@ -20,7 +20,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])));
 
     // Output to file
-    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from("samples/structured_syslog.ndjson"))));
+    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from(
+        "samples/structured_syslog.ndjson",
+    ))));
 
     // Create sample syslog data
     std::fs::write("samples/syslog.ndjson", r#"

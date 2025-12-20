@@ -17,13 +17,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // PII Redaction
     let patterns = vec![
         regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")?, // email
-        regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b")?, // SSN
+        regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b")?,                               // SSN
     ];
     pipeline.add_stage(Box::new(PIIRedaction::new(patterns)));
 
     // Filter out debug
     pipeline.add_stage(Box::new(Filter::new(Box::new(|event: &Event| {
-        event.get_string("level").map_or(true, |level| level != "debug")
+        event
+            .get_string("level")
+            .map_or(true, |level| level != "debug")
     }))));
 
     // Remap fields
@@ -32,9 +34,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline.add_stage(Box::new(FieldRemap::new(mappings)));
 
     // Derived fields
-    let derivations = HashMap::from([
-        ("processed_at".to_string(), Box::new(processed_at) as Box<dyn Fn(&Event) -> serde_json::Value>),
-    ]);
+    let derivations = HashMap::from([(
+        "processed_at".to_string(),
+        Box::new(processed_at) as Box<dyn Fn(&Event) -> serde_json::Value>,
+    )]);
     pipeline.add_stage(Box::new(DerivedFields::new(derivations)));
 
     // Require fields
@@ -45,10 +48,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])));
 
     // Output
-    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from("samples/complex_output.ndjson"))));
+    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from(
+        "samples/complex_output.ndjson",
+    ))));
 
     // Deadletter
-    let mut deadletter = Box::new(Deadletter::new(PathBuf::from("samples/complex_deadletter.ndjson")));
+    let mut deadletter = Box::new(Deadletter::new(PathBuf::from(
+        "samples/complex_deadletter.ndjson",
+    )));
 
     // Process
     let mut input = InputSource::File(PathBuf::from("samples/messy.ndjson"));

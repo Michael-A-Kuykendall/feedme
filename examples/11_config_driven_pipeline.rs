@@ -14,7 +14,10 @@ version: 1
 
     // Build pipeline based on config (placeholder)
     let mut pipeline = Pipeline::new();
-    pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+    pipeline.add_stage(Box::new(FieldSelect::new(vec![
+        "level".to_string(),
+        "message".to_string(),
+    ])));
     pipeline.add_stage(Box::new(StdoutOutput::new()));
 
     // Process

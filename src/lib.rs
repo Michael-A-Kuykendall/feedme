@@ -1,11 +1,16 @@
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::fs;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
-use regex::Regex;
 use std::time::Instant;
-use std::fmt;
+
+/// Type aliases for complex function types to reduce clippy warnings
+pub type EventDerivationFn = Box<dyn Fn(&Event) -> serde_json::Value>;
+pub type ValueConstraintFn = Box<dyn Fn(&serde_json::Value) -> bool>;
+pub type StageFactoryFn = Box<dyn Fn() -> Box<dyn Stage>>;
 
 /// Represents a structured event in the pipeline.
 /// Owned, mutable data, supports JSON-like types, typed field access, optional metadata.
@@ -155,7 +160,7 @@ impl fmt::Display for DropReason {
     }
 }
 
-/// Metrics for observability: counters, latency histograms, drop reason codes.
+/// Metrics for observability: counters, latency summaries, drop reason codes.
 /// No execution feedback loops. Bounded storage.
 #[derive(Debug)]
 pub struct Metrics {
@@ -163,7 +168,7 @@ pub struct Metrics {
     events_dropped: u64,
     errors: u64,
     stage_latencies: HashMap<String, LatencyStats>, // bounded stats
-    drop_reasons: HashMap<DropReason, u64>, // bounded reasons
+    drop_reasons: HashMap<DropReason, u64>,         // bounded reasons
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +201,12 @@ impl LatencyStats {
     }
 }
 
+impl Default for LatencyStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Metrics {
     pub fn new() -> Self {
         Metrics {
@@ -221,67 +232,112 @@ impl Metrics {
     }
 
     pub fn record_latency(&mut self, stage: &str, duration: f64) {
-        self.stage_latencies.entry(stage.to_string()).or_insert(LatencyStats::new()).record(duration);
+        self.stage_latencies
+            .entry(stage.to_string())
+            .or_default()
+            .record(duration);
     }
 
     pub fn to_prometheus(&self) -> String {
         let mut output = String::new();
         output.push_str("# HELP feedme_events_processed_total Total events processed\n");
-        output.push_str(&format!("feedme_events_processed_total {}\n", self.events_processed));
+        output.push_str(&format!(
+            "feedme_events_processed_total {}\n",
+            self.events_processed
+        ));
         output.push_str("# HELP feedme_events_dropped_total Total events dropped\n");
-        output.push_str(&format!("feedme_events_dropped_total {}\n", self.events_dropped));
+        output.push_str(&format!(
+            "feedme_events_dropped_total {}\n",
+            self.events_dropped
+        ));
         output.push_str("# HELP feedme_errors_total Total errors\n");
         output.push_str(&format!("feedme_errors_total {}\n", self.errors));
         output.push_str("# HELP feedme_stage_latency_ms Stage latency in milliseconds\n");
         output.push_str("# TYPE feedme_stage_latency_ms gauge\n");
         for (stage, stats) in &self.stage_latencies {
             if stats.count > 0 {
-                output.push_str(&format!("feedme_stage_latency_ms_sum{{stage=\"{}\"}} {}\n", stage, stats.sum));
-                output.push_str(&format!("feedme_stage_latency_ms_count{{stage=\"{}\"}} {}\n", stage, stats.count));
-                output.push_str(&format!("feedme_stage_latency_ms_min{{stage=\"{}\"}} {}\n", stage, stats.min));
-                output.push_str(&format!("feedme_stage_latency_ms_max{{stage=\"{}\"}} {}\n", stage, stats.max));
+                output.push_str(&format!(
+                    "feedme_stage_latency_ms_sum{{stage=\"{}\"}} {}\n",
+                    stage, stats.sum
+                ));
+                output.push_str(&format!(
+                    "feedme_stage_latency_ms_count{{stage=\"{}\"}} {}\n",
+                    stage, stats.count
+                ));
+                output.push_str(&format!(
+                    "feedme_stage_latency_ms_min{{stage=\"{}\"}} {}\n",
+                    stage, stats.min
+                ));
+                output.push_str(&format!(
+                    "feedme_stage_latency_ms_max{{stage=\"{}\"}} {}\n",
+                    stage, stats.max
+                ));
             }
         }
         output.push_str("# HELP feedme_drop_reasons_total Drop reasons\n");
         output.push_str("# TYPE feedme_drop_reasons_total counter\n");
         for (reason, count) in &self.drop_reasons {
-            output.push_str(&format!("feedme_drop_reasons_total{{reason=\"{}\"}} {}\n", reason, count));
+            output.push_str(&format!(
+                "feedme_drop_reasons_total{{reason=\"{}\"}} {}\n",
+                reason, count
+            ));
         }
         output
     }
 
     pub fn to_json_logs(&self) -> Vec<String> {
         let mut logs = Vec::new();
-        logs.push(serde_json::json!({
-            "metric": "events_processed",
-            "value": self.events_processed
-        }).to_string());
-        logs.push(serde_json::json!({
-            "metric": "events_dropped",
-            "value": self.events_dropped
-        }).to_string());
-        logs.push(serde_json::json!({
-            "metric": "errors",
-            "value": self.errors
-        }).to_string());
+        logs.push(
+            serde_json::json!({
+                "metric": "events_processed",
+                "value": self.events_processed
+            })
+            .to_string(),
+        );
+        logs.push(
+            serde_json::json!({
+                "metric": "events_dropped",
+                "value": self.events_dropped
+            })
+            .to_string(),
+        );
+        logs.push(
+            serde_json::json!({
+                "metric": "errors",
+                "value": self.errors
+            })
+            .to_string(),
+        );
         for (stage, stats) in &self.stage_latencies {
-            logs.push(serde_json::json!({
-                "metric": "stage_latencies",
-                "stage": stage,
-                "count": stats.count,
-                "sum": stats.sum,
-                "min": stats.min,
-                "max": stats.max
-            }).to_string());
+            logs.push(
+                serde_json::json!({
+                    "metric": "stage_latencies",
+                    "stage": stage,
+                    "count": stats.count,
+                    "sum": stats.sum,
+                    "min": stats.min,
+                    "max": stats.max
+                })
+                .to_string(),
+            );
         }
         for (reason, count) in &self.drop_reasons {
-            logs.push(serde_json::json!({
-                "metric": "drop_reasons",
-                "reason": reason,
-                "count": count
-            }).to_string());
+            logs.push(
+                serde_json::json!({
+                    "metric": "drop_reasons",
+                    "reason": reason,
+                    "count": count
+                })
+                .to_string(),
+            );
         }
         logs
+    }
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -350,6 +406,12 @@ impl Pipeline {
     }
 }
 
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Input sources: local, synchronous, stream-oriented, ordered read.
 /// No distributed offsets, no remote coordination.
 pub enum InputSource {
@@ -359,17 +421,23 @@ pub enum InputSource {
 }
 
 impl InputSource {
-    pub fn process_input(&mut self, pipeline: &mut Pipeline, deadletter: &mut Option<&mut dyn Stage>) -> Result<(), PipelineError> {
+    pub fn process_input(
+        &mut self,
+        pipeline: &mut Pipeline,
+        deadletter: &mut Option<&mut dyn Stage>,
+    ) -> Result<(), PipelineError> {
         match self {
             InputSource::Stdin => {
                 let stdin = io::stdin();
                 let lines = stdin.lines();
                 for line in lines {
-                    let line = line.map_err(|e| PipelineError::System(SystemError {
-                        stage: "Input_Stdin".to_string(),
-                        code: "IO_ERROR".to_string(),
-                        message: e.to_string(),
-                    }))?;
+                    let line = line.map_err(|e| {
+                        PipelineError::System(SystemError {
+                            stage: "Input_Stdin".to_string(),
+                            code: "IO_ERROR".to_string(),
+                            message: e.to_string(),
+                        })
+                    })?;
                     let event = match Event::from_raw_input(&line) {
                         Ok(e) => e,
                         Err(e) => {
@@ -420,18 +488,22 @@ impl InputSource {
                 Ok(())
             }
             InputSource::File(path) => {
-                let file = fs::File::open(path).map_err(|e| PipelineError::System(SystemError {
-                    stage: "Input_File".to_string(),
-                    code: "IO_ERROR".to_string(),
-                    message: e.to_string(),
-                }))?;
-                let lines = io::BufReader::new(file).lines();
-                for line in lines {
-                    let line = line.map_err(|e| PipelineError::System(SystemError {
+                let file = fs::File::open(path).map_err(|e| {
+                    PipelineError::System(SystemError {
                         stage: "Input_File".to_string(),
                         code: "IO_ERROR".to_string(),
                         message: e.to_string(),
-                    }))?;
+                    })
+                })?;
+                let lines = io::BufReader::new(file).lines();
+                for line in lines {
+                    let line = line.map_err(|e| {
+                        PipelineError::System(SystemError {
+                            stage: "Input_File".to_string(),
+                            code: "IO_ERROR".to_string(),
+                            message: e.to_string(),
+                        })
+                    })?;
                     let event = match Event::from_raw_input(&line) {
                         Ok(e) => e,
                         Err(e) => {
@@ -482,18 +554,22 @@ impl InputSource {
                 Ok(())
             }
             InputSource::Directory(dir) => {
-                let entries = fs::read_dir(dir).map_err(|e| PipelineError::System(SystemError {
-                    stage: "Input_Directory".to_string(),
-                    code: "IO_ERROR".to_string(),
-                    message: e.to_string(),
-                }))?;
-                let mut paths: Vec<PathBuf> = Vec::new();
-                for entry in entries {
-                    let entry = entry.map_err(|e| PipelineError::System(SystemError {
+                let entries = fs::read_dir(dir).map_err(|e| {
+                    PipelineError::System(SystemError {
                         stage: "Input_Directory".to_string(),
                         code: "IO_ERROR".to_string(),
                         message: e.to_string(),
-                    }))?;
+                    })
+                })?;
+                let mut paths: Vec<PathBuf> = Vec::new();
+                for entry in entries {
+                    let entry = entry.map_err(|e| {
+                        PipelineError::System(SystemError {
+                            stage: "Input_Directory".to_string(),
+                            code: "IO_ERROR".to_string(),
+                            message: e.to_string(),
+                        })
+                    })?;
                     let path = entry.path();
                     if path.is_file() {
                         paths.push(path);
@@ -521,16 +597,20 @@ pub struct NDJSONParser;
 
 impl Parser for NDJSONParser {
     fn parse(&self, raw: &[u8]) -> Result<Event, PipelineError> {
-        let s = std::str::from_utf8(raw).map_err(|e| PipelineError::Parse(ParseError {
-            stage: "NDJSON".to_string(),
-            code: "UTF8_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
-        Event::from_raw_input(s).map_err(|e| PipelineError::Parse(ParseError {
-            stage: "NDJSON".to_string(),
-            code: "JSON_ERROR".to_string(),
-            message: e.to_string(),
-        }))
+        let s = std::str::from_utf8(raw).map_err(|e| {
+            PipelineError::Parse(ParseError {
+                stage: "NDJSON".to_string(),
+                code: "UTF8_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
+        Event::from_raw_input(s).map_err(|e| {
+            PipelineError::Parse(ParseError {
+                stage: "NDJSON".to_string(),
+                code: "JSON_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })
     }
 }
 
@@ -538,18 +618,25 @@ pub struct JSONArrayParser;
 
 impl Parser for JSONArrayParser {
     fn parse(&self, raw: &[u8]) -> Result<Event, PipelineError> {
-        let s = std::str::from_utf8(raw).map_err(|e| PipelineError::Parse(ParseError {
-            stage: "JSONArray".to_string(),
-            code: "UTF8_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
-        let value: serde_json::Value = serde_json::from_str(s).map_err(|e| PipelineError::Parse(ParseError {
-            stage: "JSONArray".to_string(),
-            code: "JSON_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
+        let s = std::str::from_utf8(raw).map_err(|e| {
+            PipelineError::Parse(ParseError {
+                stage: "JSONArray".to_string(),
+                code: "UTF8_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
+        let value: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+            PipelineError::Parse(ParseError {
+                stage: "JSONArray".to_string(),
+                code: "JSON_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
         // For array, perhaps wrap in an event with the array as data
-        Ok(Event { data: value, metadata: None })
+        Ok(Event {
+            data: value,
+            metadata: None,
+        })
     }
 }
 
@@ -558,11 +645,13 @@ pub struct SyslogParser;
 impl Parser for SyslogParser {
     fn parse(&self, raw: &[u8]) -> Result<Event, PipelineError> {
         // Best effort syslog parsing: simple regex or basic parsing
-        let s = std::str::from_utf8(raw).map_err(|e| PipelineError::Parse(ParseError {
-            stage: "Syslog".to_string(),
-            code: "UTF8_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
+        let s = std::str::from_utf8(raw).map_err(|e| {
+            PipelineError::Parse(ParseError {
+                stage: "Syslog".to_string(),
+                code: "UTF8_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
         // Simple syslog: <pri>timestamp host message
         // For now, create an event with the raw string
         Ok(Event {
@@ -668,11 +757,11 @@ impl Stage for PIIRedaction {
 impl Transform for PIIRedaction {}
 
 pub struct DerivedFields {
-    derivations: HashMap<String, Box<dyn Fn(&Event) -> serde_json::Value>>,
+    derivations: HashMap<String, EventDerivationFn>,
 }
 
 impl DerivedFields {
-    pub fn new(derivations: HashMap<String, Box<dyn Fn(&Event) -> serde_json::Value>>) -> Self {
+    pub fn new(derivations: HashMap<String, EventDerivationFn>) -> Self {
         DerivedFields { derivations }
     }
 }
@@ -788,7 +877,10 @@ impl Stage for TypeChecking {
                         return Err(PipelineError::Validation(ValidationError {
                             stage: "TypeChecking".to_string(),
                             code: "TYPE_MISMATCH".to_string(),
-                            message: format!("Field {} expected {} but got {}", field, expected_type, actual_type),
+                            message: format!(
+                                "Field {} expected {} but got {}",
+                                field, expected_type, actual_type
+                            ),
                         }));
                     }
                 }
@@ -805,11 +897,11 @@ impl Stage for TypeChecking {
 impl Validator for TypeChecking {}
 
 pub struct ValueConstraints {
-    constraints: HashMap<String, Box<dyn Fn(&serde_json::Value) -> bool>>,
+    constraints: HashMap<String, ValueConstraintFn>,
 }
 
 impl ValueConstraints {
-    pub fn new(constraints: HashMap<String, Box<dyn Fn(&serde_json::Value) -> bool>>) -> Self {
+    pub fn new(constraints: HashMap<String, ValueConstraintFn>) -> Self {
         ValueConstraints { constraints }
     }
 }
@@ -853,11 +945,14 @@ impl StdoutOutput {
 
 impl Stage for StdoutOutput {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
-        println!("{}", serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
-            stage: "Stdout".to_string(),
-            code: "SERIALIZE_ERROR".to_string(),
-            message: e.to_string(),
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
+                stage: "Stdout".to_string(),
+                code: "SERIALIZE_ERROR".to_string(),
+                message: e.to_string(),
+            }))?
+        );
         Ok(None) // Consumed
     }
 
@@ -872,6 +967,12 @@ impl Stage for StdoutOutput {
 
 impl Output for StdoutOutput {}
 
+impl Default for StdoutOutput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct FileOutput {
     path: PathBuf,
 }
@@ -885,20 +986,33 @@ impl FileOutput {
 impl Stage for FileOutput {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
         use std::io::Write;
-        let mut file = fs::OpenOptions::new().append(true).create(true).open(&self.path).map_err(|e| PipelineError::Output(OutputError {
-            stage: "File".to_string(),
-            code: "IO_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
-        writeln!(file, "{}", serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
-            stage: "File".to_string(),
-            code: "SERIALIZE_ERROR".to_string(),
-            message: e.to_string(),
-        }))?).map_err(|e| PipelineError::Output(OutputError {
-            stage: "File".to_string(),
-            code: "IO_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&self.path)
+            .map_err(|e| {
+                PipelineError::Output(OutputError {
+                    stage: "File".to_string(),
+                    code: "IO_ERROR".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
+        writeln!(
+            file,
+            "{}",
+            serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
+                stage: "File".to_string(),
+                code: "SERIALIZE_ERROR".to_string(),
+                message: e.to_string(),
+            }))?
+        )
+        .map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "File".to_string(),
+                code: "IO_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
         Ok(None) // Consumed
     }
 
@@ -926,20 +1040,33 @@ impl Deadletter {
 impl Stage for Deadletter {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
         use std::io::Write;
-        let mut file = fs::OpenOptions::new().append(true).create(true).open(&self.path).map_err(|e| PipelineError::Output(OutputError {
-            stage: "Deadletter".to_string(),
-            code: "IO_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
-        writeln!(file, "{}", serde_json::to_string(&event).map_err(|e| PipelineError::Output(OutputError {
-            stage: "Deadletter".to_string(),
-            code: "SERIALIZE_ERROR".to_string(),
-            message: e.to_string(),
-        }))?).map_err(|e| PipelineError::Output(OutputError {
-            stage: "Deadletter".to_string(),
-            code: "IO_ERROR".to_string(),
-            message: e.to_string(),
-        }))?;
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&self.path)
+            .map_err(|e| {
+                PipelineError::Output(OutputError {
+                    stage: "Deadletter".to_string(),
+                    code: "IO_ERROR".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
+        writeln!(
+            file,
+            "{}",
+            serde_json::to_string(&event).map_err(|e| PipelineError::Output(OutputError {
+                stage: "Deadletter".to_string(),
+                code: "SERIALIZE_ERROR".to_string(),
+                message: e.to_string(),
+            }))?
+        )
+        .map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "Deadletter".to_string(),
+                code: "IO_ERROR".to_string(),
+                message: e.to_string(),
+            })
+        })?;
         Ok(None) // Consumed
     }
 
@@ -976,15 +1103,17 @@ impl Config {
 /// Plugins: enable user-defined stages with explicit registration and isolation.
 /// No implicit discovery.
 pub struct PluginRegistry {
-    plugins: HashMap<String, Box<dyn Fn() -> Box<dyn Stage>>>,
+    plugins: HashMap<String, StageFactoryFn>,
 }
 
 impl PluginRegistry {
     pub fn new() -> Self {
-        PluginRegistry { plugins: HashMap::new() }
+        PluginRegistry {
+            plugins: HashMap::new(),
+        }
     }
 
-    pub fn register(&mut self, name: String, factory: Box<dyn Fn() -> Box<dyn Stage>>) {
+    pub fn register(&mut self, name: String, factory: StageFactoryFn) {
         self.plugins.insert(name, factory);
     }
 
@@ -993,6 +1122,11 @@ impl PluginRegistry {
     }
 }
 
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1001,7 +1135,10 @@ mod tests {
     #[test]
     fn test_event_creation() {
         let data = serde_json::json!({"key": "value"});
-        let event = Event { data, metadata: None };
+        let event = Event {
+            data,
+            metadata: None,
+        };
         assert_eq!(event.get_string("key"), Some("value"));
         assert_eq!(event.get_string("missing"), None);
     }
@@ -1038,7 +1175,10 @@ mod tests {
         assert!(result.is_some());
         let filtered = result.unwrap();
         assert_eq!(filtered.data.get("level"), Some(&serde_json::json!("info")));
-        assert_eq!(filtered.data.get("message"), Some(&serde_json::json!("test")));
+        assert_eq!(
+            filtered.data.get("message"),
+            Some(&serde_json::json!("test"))
+        );
         assert_eq!(filtered.data.get("extra"), None);
     }
 
@@ -1205,32 +1345,32 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create files in non-alphabetical order to test sorting
         let file_z = temp_dir.path().join("z.ndjson");
         let file_a = temp_dir.path().join("a.ndjson");
         let file_m = temp_dir.path().join("m.ndjson");
-        
+
         fs::write(&file_z, r#"{"file": "z"}"#).unwrap();
         fs::write(&file_a, r#"{"file": "a"}"#).unwrap();
         fs::write(&file_m, r#"{"file": "m"}"#).unwrap();
-        
+
         // Create a pipeline that will process all files
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         // Process directory - should work without errors
         // The determinism guarantee is that files are sorted before processing
         let mut input_source = InputSource::Directory(temp_dir.path().to_path_buf());
         let result = input_source.process_input(&mut pipeline, &mut None);
-        
+
         // Should succeed - if it does, the sorting logic worked
         assert!(result.is_ok());
-        
+
         // Check that we processed 3 events (one from each file)
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 3"));
-        
+
         // Verify files still exist (weren't corrupted)
         assert!(file_a.exists());
         assert!(file_m.exists());
@@ -1242,21 +1382,23 @@ mod tests {
         use std::fs;
         use std::path::PathBuf;
         let temp_file = PathBuf::from("test_deadletter_attr.ndjson");
-        
+
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(RequiredFields::new(vec!["missing_field".to_string()])));
-        
+        pipeline.add_stage(Box::new(RequiredFields::new(vec![
+            "missing_field".to_string()
+        ])));
+
         let mut deadletter = Deadletter::new(temp_file.clone());
-        
+
         let event = Event {
             data: serde_json::json!({"existing_field": "value"}),
             metadata: None,
         };
-        
+
         // Process should fail and go to deadletter
         let result = pipeline.process_event(event);
         assert!(result.is_err());
-        
+
         // Simulate deadletter execution (normally done by InputSource)
         if let Err(e) = result {
             let error_event = Event {
@@ -1271,19 +1413,22 @@ mod tests {
             };
             deadletter.execute(error_event).unwrap();
         }
-        
+
         // Check deadletter file contains structured error info
         assert!(temp_file.exists());
         let content = fs::read_to_string(&temp_file).unwrap();
         let first_line = content.lines().next().unwrap();
         let deadletter_json: serde_json::Value = serde_json::from_str(first_line).unwrap();
-        
+
         assert_eq!(deadletter_json["data"]["error"], "pipeline");
         assert_eq!(deadletter_json["data"]["category"], "Validation");
         assert_eq!(deadletter_json["data"]["stage"], "RequiredFields");
         assert_eq!(deadletter_json["data"]["code"], "MISSING_FIELD");
-        assert!(deadletter_json["data"]["message"].as_str().unwrap().contains("Missing required field"));
-        
+        assert!(deadletter_json["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Missing required field"));
+
         // Cleanup
         fs::remove_file(temp_file).unwrap();
     }
@@ -1316,7 +1461,7 @@ mod tests {
         assert_eq!(parse_err.stage(), "test");
         assert_eq!(parse_err.code(), "TEST");
         assert_eq!(parse_err.message(), "test");
-        
+
         let transform_err = PipelineError::Transform(TransformError {
             stage: "transform_test".to_string(),
             code: "TRANSFORM_TEST".to_string(),
@@ -1326,7 +1471,7 @@ mod tests {
         assert_eq!(transform_err.stage(), "transform_test");
         assert_eq!(transform_err.code(), "TRANSFORM_TEST");
         assert_eq!(transform_err.message(), "transform test");
-        
+
         let validation_err = PipelineError::Validation(ValidationError {
             stage: "validation_test".to_string(),
             code: "VALIDATION_TEST".to_string(),
@@ -1336,7 +1481,7 @@ mod tests {
         assert_eq!(validation_err.stage(), "validation_test");
         assert_eq!(validation_err.code(), "VALIDATION_TEST");
         assert_eq!(validation_err.message(), "validation test");
-        
+
         let output_err = PipelineError::Output(OutputError {
             stage: "output_test".to_string(),
             code: "OUTPUT_TEST".to_string(),
@@ -1346,7 +1491,7 @@ mod tests {
         assert_eq!(output_err.stage(), "output_test");
         assert_eq!(output_err.code(), "OUTPUT_TEST");
         assert_eq!(output_err.message(), "output test");
-        
+
         let system_err = PipelineError::System(SystemError {
             stage: "system_test".to_string(),
             code: "SYSTEM_TEST".to_string(),
@@ -1411,9 +1556,9 @@ mod tests {
         let mut type_checks = HashMap::new();
         type_checks.insert("level".to_string(), "string".to_string());
         type_checks.insert("count".to_string(), "number".to_string());
-        
+
         let mut stage = TypeChecking::new(type_checks);
-        
+
         // Valid event
         let valid_event = Event {
             data: serde_json::json!({"level": "info", "count": 42}),
@@ -1421,7 +1566,7 @@ mod tests {
         };
         let result = stage.execute(valid_event).unwrap();
         assert!(result.is_some());
-        
+
         // Invalid event - wrong type
         let invalid_event = Event {
             data: serde_json::json!({"level": 123, "count": "not_a_number"}),
@@ -1436,12 +1581,14 @@ mod tests {
     fn test_value_constraints_stage() {
         use std::collections::HashMap;
         let mut constraints = HashMap::new();
-        constraints.insert("count".to_string(), Box::new(|v: &serde_json::Value| {
-            v.as_i64().map(|n| n >= 0).unwrap_or(false)
-        }) as Box<dyn Fn(&serde_json::Value) -> bool>);
-        
+        constraints.insert(
+            "count".to_string(),
+            Box::new(|v: &serde_json::Value| v.as_i64().map(|n| n >= 0).unwrap_or(false))
+                as Box<dyn Fn(&serde_json::Value) -> bool>,
+        );
+
         let mut stage = ValueConstraints::new(constraints);
-        
+
         // Valid event
         let valid_event = Event {
             data: serde_json::json!({"count": 10}),
@@ -1449,7 +1596,7 @@ mod tests {
         };
         let result = stage.execute(valid_event).unwrap();
         assert!(result.is_some());
-        
+
         // Invalid event - constraint violation
         let invalid_event = Event {
             data: serde_json::json!({"count": -5}),
@@ -1492,10 +1639,12 @@ mod tests {
     fn test_derived_fields_stage() {
         use std::collections::HashMap;
         let mut derivations = HashMap::new();
-        derivations.insert("derived_field".to_string(), Box::new(|event: &Event| {
-            event.get_string("base_field").unwrap_or("default").into()
-        }) as Box<dyn Fn(&Event) -> serde_json::Value>);
-        
+        derivations.insert(
+            "derived_field".to_string(),
+            Box::new(|event: &Event| event.get_string("base_field").unwrap_or("default").into())
+                as Box<dyn Fn(&Event) -> serde_json::Value>,
+        );
+
         let mut stage = DerivedFields::new(derivations);
         let event = Event {
             data: serde_json::json!({"base_field": "test_value"}),
@@ -1515,7 +1664,7 @@ mod tests {
         });
         let display = format!("{}", parse_err);
         assert!(display.contains("Parse error: test message"));
-        
+
         let transform_err = PipelineError::Transform(TransformError {
             stage: "test".to_string(),
             code: "TEST".to_string(),
@@ -1554,7 +1703,7 @@ mod tests {
             data: serde_json::json!({"count": 42, "rate": 3.15, "text": "not_a_number"}),
             metadata: None,
         };
-        
+
         assert_eq!(event.get_number("count"), Some(42.0));
         assert_eq!(event.get_number("rate"), Some(3.15));
         assert_eq!(event.get_number("text"), None);
@@ -1568,12 +1717,12 @@ mod tests {
         let result = parser.parse(valid_json.as_bytes()).unwrap();
         assert_eq!(result.get_string("level"), Some("info"));
         assert_eq!(result.get_string("message"), Some("test"));
-        
+
         let invalid_utf8 = &[0xFF, 0xFF, 0xFF, 0xFF];
         let result = parser.parse(invalid_utf8);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Parse");
-        
+
         let invalid_json = "not valid json";
         let result = parser.parse(invalid_json.as_bytes());
         assert!(result.is_err());
@@ -1586,12 +1735,12 @@ mod tests {
         let valid_array = r#"[{"item": 1}, {"item": 2}]"#;
         let result = parser.parse(valid_array.as_bytes()).unwrap();
         assert!(result.data.is_array());
-        
+
         let invalid_utf8 = &[0xFF, 0xFF, 0xFF, 0xFF];
         let result = parser.parse(invalid_utf8);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Parse");
-        
+
         let invalid_json = "not valid json";
         let result = parser.parse(invalid_json.as_bytes());
         assert!(result.is_err());
@@ -1604,7 +1753,7 @@ mod tests {
         let syslog_message = "<13>2024-01-01T10:00:00Z myhost test message";
         let result = parser.parse(syslog_message.as_bytes()).unwrap();
         assert_eq!(result.get_string("message"), Some(syslog_message));
-        
+
         let invalid_utf8 = &[0xFF, 0xFF, 0xFF, 0xFF];
         let result = parser.parse(invalid_utf8);
         assert!(result.is_err());
@@ -1617,13 +1766,13 @@ mod tests {
         let mut mappings = HashMap::new();
         mappings.insert("old_field".to_string(), "new_field".to_string());
         mappings.insert("another_old".to_string(), "another_new".to_string());
-        
+
         let mut stage = FieldRemap::new(mappings);
         let event = Event {
             data: serde_json::json!({"old_field": "value1", "another_old": "value2", "keep": "value3"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event).unwrap().unwrap();
         assert_eq!(result.get_string("new_field"), Some("value1"));
         assert_eq!(result.get_string("another_new"), Some("value2"));
@@ -1631,7 +1780,7 @@ mod tests {
         assert_eq!(result.get_string("old_field"), None);
         assert_eq!(result.get_string("another_old"), None);
         assert_eq!(stage.name(), "FieldRemap");
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string"),
             metadata: None,
@@ -1645,16 +1794,19 @@ mod tests {
         let valid_yaml = "version: 1";
         let config = Config::from_yaml(valid_yaml).unwrap();
         assert_eq!(config.version, 1);
-        
+
         let invalid_version = "version: 2";
         let result = Config::from_yaml(invalid_version);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Unsupported version"));
-        
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported version"));
+
         let invalid_yaml = "invalid: yaml: structure: [";
         let result = Config::from_yaml(invalid_yaml);
         assert!(result.is_err());
-        
+
         let unknown_fields = "version: 1\nunknown_field: value";
         let result = Config::from_yaml(unknown_fields);
         assert!(result.is_err());
@@ -1663,14 +1815,15 @@ mod tests {
     #[test]
     fn test_plugin_registry() {
         let mut registry = PluginRegistry::new();
-        registry.register("test_stage".to_string(), Box::new(|| {
-            Box::new(StdoutOutput::new())
-        }));
-        
+        registry.register(
+            "test_stage".to_string(),
+            Box::new(|| Box::new(StdoutOutput::new())),
+        );
+
         let stage = registry.get_stage("test_stage");
         assert!(stage.is_some());
         assert_eq!(stage.unwrap().name(), "StdoutOutput");
-        
+
         let missing = registry.get_stage("missing_stage");
         assert!(missing.is_none());
     }
@@ -1687,7 +1840,7 @@ mod tests {
             code: "TEST".to_string(),
             message: "test error".to_string(),
         });
-        
+
         let _: &dyn std::error::Error = &error;
     }
 
@@ -1703,11 +1856,13 @@ mod tests {
         drop(file);
 
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(RequiredFields::new(vec!["missing_field".to_string()])));
-        
+        pipeline.add_stage(Box::new(RequiredFields::new(vec![
+            "missing_field".to_string()
+        ])));
+
         let mut deadletter_stage = Deadletter::new(deadletter_file.into());
         let mut deadletter: Option<&mut dyn Stage> = Some(&mut deadletter_stage);
-        
+
         let mut input = InputSource::File(temp_file.into());
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_ok());
@@ -1724,29 +1879,35 @@ mod tests {
     #[test]
     fn test_complete_pipeline_with_transforms_and_validators() {
         let mut pipeline = Pipeline::new();
-        
+
         let mut field_mappings = std::collections::HashMap::new();
         field_mappings.insert("msg".to_string(), "message".to_string());
         pipeline.add_stage(Box::new(FieldRemap::new(field_mappings)));
-        
-        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
-        
-        pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string(), "message".to_string()])));
-        
+
+        pipeline.add_stage(Box::new(FieldSelect::new(vec![
+            "level".to_string(),
+            "message".to_string(),
+        ])));
+
+        pipeline.add_stage(Box::new(RequiredFields::new(vec![
+            "level".to_string(),
+            "message".to_string(),
+        ])));
+
         let mut type_checks = std::collections::HashMap::new();
         type_checks.insert("level".to_string(), "string".to_string());
         pipeline.add_stage(Box::new(TypeChecking::new(type_checks)));
-        
+
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let event = Event {
             data: serde_json::json!({"level": "info", "msg": "test message", "extra": "ignored"}),
             metadata: None,
         };
-        
+
         let result = pipeline.process_event(event).unwrap();
         assert!(result.is_none());
-        
+
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 1"));
         assert!(prometheus.contains("feedme_stage_latency_ms"));
@@ -1759,18 +1920,21 @@ mod tests {
         metrics.increment_dropped(DropReason::Filtered);
         metrics.increment_errors();
         metrics.record_latency("test_stage", 100.5);
-        
+
         let prometheus = metrics.to_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 1"));
         assert!(prometheus.contains("feedme_events_dropped_total 1"));
         assert!(prometheus.contains("feedme_errors_total 1"));
         assert!(prometheus.contains("feedme_stage_latency_ms_sum{stage=\"test_stage\"} 100.5"));
         assert!(prometheus.contains("feedme_drop_reasons_total{reason=\"filtered\"} 1"));
-        
+
         let json_logs = metrics.to_json_logs();
         assert!(json_logs.len() >= 4);
-        
-        let processed_log = json_logs.iter().find(|log| log.contains("events_processed")).unwrap();
+
+        let processed_log = json_logs
+            .iter()
+            .find(|log| log.contains("events_processed"))
+            .unwrap();
         let log_json: serde_json::Value = serde_json::from_str(processed_log).unwrap();
         assert_eq!(log_json["metric"], "events_processed");
         assert_eq!(log_json["value"], 1);
@@ -1780,35 +1944,35 @@ mod tests {
     fn test_input_source_directory_with_deadletter() {
         use std::fs;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let file1 = temp_dir.path().join("file1.ndjson");
         let file2 = temp_dir.path().join("file2.ndjson");
-        
+
         fs::write(&file1, "invalid json\n").unwrap();
         fs::write(&file2, r#"{"level": "info"}"#).unwrap();
-        
+
         let deadletter_file = temp_dir.path().join("deadletter.ndjson");
         let mut deadletter_stage = Deadletter::new(deadletter_file.clone());
         let mut deadletter: Option<&mut dyn Stage> = Some(&mut deadletter_stage);
-        
+
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let mut input = InputSource::Directory(temp_dir.path().to_path_buf());
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_ok());
-        
+
         let deadletter_content = fs::read_to_string(&deadletter_file).unwrap();
         assert!(deadletter_content.contains("parse"));
         assert!(deadletter_content.contains("PARSE_ERROR"));
     }
 
-    #[test] 
+    #[test]
     fn test_stage_is_output_default() {
         let stage = FieldSelect::new(vec!["test".to_string()]);
         assert!(!stage.is_output());
-        
+
         let output_stage = StdoutOutput::new();
         assert!(output_stage.is_output());
     }
@@ -1820,16 +1984,16 @@ mod tests {
         assert_eq!(stats.sum, 0.0);
         assert_eq!(stats.min, f64::INFINITY);
         assert_eq!(stats.max, f64::NEG_INFINITY);
-        
+
         stats.record(5.0);
         assert_eq!(stats.count, 1);
         assert_eq!(stats.min, 5.0);
         assert_eq!(stats.max, 5.0);
-        
+
         stats.record(3.0);
         assert_eq!(stats.min, 3.0);
         assert_eq!(stats.max, 5.0);
-        
+
         stats.record(7.0);
         assert_eq!(stats.min, 3.0);
         assert_eq!(stats.max, 7.0);
@@ -1838,23 +2002,25 @@ mod tests {
     #[test]
     fn test_pipeline_stage_filtering() {
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(Filter::new(Box::new(|e| e.get_string("level") == Some("error")))));
+        pipeline.add_stage(Box::new(Filter::new(Box::new(|e| {
+            e.get_string("level") == Some("error")
+        }))));
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let info_event = Event {
             data: serde_json::json!({"level": "info", "message": "test"}),
             metadata: None,
         };
         let result = pipeline.process_event(info_event).unwrap();
         assert!(result.is_none());
-        
+
         let error_event = Event {
             data: serde_json::json!({"level": "error", "message": "test"}),
             metadata: None,
         };
         let result = pipeline.process_event(error_event).unwrap();
         assert!(result.is_none());
-        
+
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 2"));
         assert!(prometheus.contains("feedme_events_dropped_total 1"));
@@ -1867,15 +2033,18 @@ mod tests {
             code: "TEST".to_string(),
             message: "validation test".to_string(),
         });
-        assert_eq!(format!("{}", validation_err), "Validation error: validation test");
-        
+        assert_eq!(
+            format!("{}", validation_err),
+            "Validation error: validation test"
+        );
+
         let output_err = PipelineError::Output(OutputError {
             stage: "test".to_string(),
             code: "TEST".to_string(),
             message: "output test".to_string(),
         });
         assert_eq!(format!("{}", output_err), "Output error: output test");
-        
+
         let system_err = PipelineError::System(SystemError {
             stage: "test".to_string(),
             code: "TEST".to_string(),
@@ -1900,12 +2069,12 @@ mod tests {
         use std::path::PathBuf;
         let invalid_path = PathBuf::from("/invalid/path/that/should/not/exist/output.json");
         let mut stage = FileOutput::new(invalid_path);
-        
+
         let event = Event {
             data: serde_json::json!({"test": "data"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Output");
@@ -1916,12 +2085,12 @@ mod tests {
         use std::path::PathBuf;
         let invalid_path = PathBuf::from("/invalid/path/that/should/not/exist/deadletter.json");
         let mut stage = Deadletter::new(invalid_path);
-        
+
         let event = Event {
             data: serde_json::json!({"error": "test"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Output");
@@ -1931,11 +2100,11 @@ mod tests {
     fn test_metrics_empty_latency_stats() {
         let metrics = Metrics::new();
         let prometheus = metrics.to_prometheus();
-        
+
         assert!(prometheus.contains("feedme_events_processed_total 0"));
         assert!(prometheus.contains("feedme_events_dropped_total 0"));
         assert!(prometheus.contains("feedme_errors_total 0"));
-        
+
         let json_logs = metrics.to_json_logs();
         assert!(json_logs.len() >= 3);
     }
@@ -1943,13 +2112,25 @@ mod tests {
     #[test]
     fn test_stage_names() {
         assert_eq!(FieldSelect::new(vec![]).name(), "FieldSelect");
-        assert_eq!(FieldRemap::new(std::collections::HashMap::new()).name(), "FieldRemap");
+        assert_eq!(
+            FieldRemap::new(std::collections::HashMap::new()).name(),
+            "FieldRemap"
+        );
         assert_eq!(PIIRedaction::new(vec![]).name(), "PIIRedaction");
-        assert_eq!(DerivedFields::new(std::collections::HashMap::new()).name(), "DerivedFields");
+        assert_eq!(
+            DerivedFields::new(std::collections::HashMap::new()).name(),
+            "DerivedFields"
+        );
         assert_eq!(Filter::new(Box::new(|_| true)).name(), "Filter");
         assert_eq!(RequiredFields::new(vec![]).name(), "RequiredFields");
-        assert_eq!(TypeChecking::new(std::collections::HashMap::new()).name(), "TypeChecking");
-        assert_eq!(ValueConstraints::new(std::collections::HashMap::new()).name(), "ValueConstraints");
+        assert_eq!(
+            TypeChecking::new(std::collections::HashMap::new()).name(),
+            "TypeChecking"
+        );
+        assert_eq!(
+            ValueConstraints::new(std::collections::HashMap::new()).name(),
+            "ValueConstraints"
+        );
         assert_eq!(StdoutOutput::new().name(), "StdoutOutput");
         assert_eq!(FileOutput::new("/tmp/test".into()).name(), "FileOutput");
         assert_eq!(Deadletter::new("/tmp/test".into()).name(), "Deadletter");
@@ -1973,12 +2154,12 @@ mod tests {
     #[test]
     fn test_stdout_output_serialization_error() {
         let mut stage = StdoutOutput::new();
-        
+
         let event_with_infinite = Event {
             data: serde_json::json!({"value": std::f64::INFINITY}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event_with_infinite);
         match result {
             Ok(_) => {
@@ -1997,15 +2178,18 @@ mod tests {
         let mut metadata = BTreeMap::new();
         metadata.insert("source".to_string(), serde_json::json!("test"));
         metadata.insert("timestamp".to_string(), serde_json::json!(1234567890));
-        
+
         let event = Event {
             data: serde_json::json!({"message": "test"}),
             metadata: Some(metadata),
         };
-        
+
         assert_eq!(event.get_string("message"), Some("test"));
         assert!(event.metadata.is_some());
-        assert_eq!(event.metadata.as_ref().unwrap().get("source").unwrap(), &serde_json::json!("test"));
+        assert_eq!(
+            event.metadata.as_ref().unwrap().get("source").unwrap(),
+            &serde_json::json!("test")
+        );
     }
 
     #[test]
@@ -2013,32 +2197,35 @@ mod tests {
         use std::fs;
         use std::io::Write;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let input_file = temp_dir.path().join("input.ndjson");
         let deadletter_file = temp_dir.path().join("deadletter.ndjson");
-        
+
         let mut file = fs::File::create(&input_file).unwrap();
         writeln!(file, "invalid json line").unwrap();
         writeln!(file, r#"{{"level": "info", "message": "valid"}}"#).unwrap();
         writeln!(file, r#"{{"level": "warn"}}"#).unwrap();
         drop(file);
-        
+
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string(), "message".to_string()])));
+        pipeline.add_stage(Box::new(RequiredFields::new(vec![
+            "level".to_string(),
+            "message".to_string(),
+        ])));
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let mut deadletter_stage = Deadletter::new(deadletter_file.clone());
         let mut deadletter: Option<&mut dyn Stage> = Some(&mut deadletter_stage);
-        
+
         let mut input = InputSource::File(input_file);
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_ok());
-        
+
         let deadletter_content = fs::read_to_string(&deadletter_file).unwrap();
         assert!(deadletter_content.contains("PARSE_ERROR"));
         assert!(deadletter_content.contains("MISSING_FIELD"));
-        
+
         let lines: Vec<&str> = deadletter_content.lines().collect();
         assert_eq!(lines.len(), 2);
     }
@@ -2053,9 +2240,9 @@ mod tests {
         type_checks.insert("obj_field".to_string(), "object".to_string());
         type_checks.insert("arr_field".to_string(), "array".to_string());
         type_checks.insert("null_field".to_string(), "null".to_string());
-        
+
         let mut stage = TypeChecking::new(type_checks);
-        
+
         let valid_event = Event {
             data: serde_json::json!({
                 "str_field": "hello",
@@ -2067,10 +2254,10 @@ mod tests {
             }),
             metadata: None,
         };
-        
+
         let result = stage.execute(valid_event).unwrap();
         assert!(result.is_some());
-        
+
         let invalid_event = Event {
             data: serde_json::json!({
                 "str_field": 42,
@@ -2078,7 +2265,7 @@ mod tests {
             }),
             metadata: None,
         };
-        
+
         let result = stage.execute(invalid_event);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Validation");
@@ -2089,11 +2276,11 @@ mod tests {
         use std::path::PathBuf;
         let nonexistent_file = PathBuf::from("/nonexistent/path/file.json");
         let mut input = InputSource::File(nonexistent_file);
-        
+
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(StdoutOutput::new()));
         let mut deadletter: Option<&mut dyn Stage> = None;
-        
+
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2117,20 +2304,20 @@ mod tests {
     fn test_file_output_serialization_error() {
         use std::fs;
         use std::path::PathBuf;
-        
+
         let temp_file = "test_serialize_error.json";
         let mut stage = FileOutput::new(PathBuf::from(temp_file));
-        
+
         // Create an event that will cause JSON serialization issues
         let problematic_event = Event {
             data: serde_json::json!({"data": "normal"}),
             metadata: None,
         };
-        
+
         // This should work fine
         let result = stage.execute(problematic_event);
         assert!(result.is_ok());
-        
+
         // Clean up
         if std::path::Path::new(temp_file).exists() {
             fs::remove_file(temp_file).unwrap();
@@ -2141,18 +2328,18 @@ mod tests {
     fn test_deadletter_serialization_error() {
         use std::fs;
         use std::path::PathBuf;
-        
+
         let temp_file = "test_deadletter_serialize.json";
         let mut stage = Deadletter::new(PathBuf::from(temp_file));
-        
+
         let event = Event {
             data: serde_json::json!({"error": "test"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event);
         assert!(result.is_ok());
-        
+
         // Clean up
         if std::path::Path::new(temp_file).exists() {
             fs::remove_file(temp_file).unwrap();
@@ -2163,11 +2350,11 @@ mod tests {
     fn test_directory_io_error_during_iteration() {
         use std::path::PathBuf;
         let mut input = InputSource::Directory(PathBuf::from("/nonexistent/directory"));
-        
+
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(StdoutOutput::new()));
         let mut deadletter: Option<&mut dyn Stage> = None;
-        
+
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "System");
@@ -2177,49 +2364,58 @@ mod tests {
     fn test_pipeline_with_error_in_middle_stage() {
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string()])));
-        pipeline.add_stage(Box::new(RequiredFields::new(vec!["missing_field".to_string()])));
+        pipeline.add_stage(Box::new(RequiredFields::new(vec![
+            "missing_field".to_string()
+        ])));
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let event = Event {
             data: serde_json::json!({"level": "info", "message": "test"}),
             metadata: None,
         };
-        
+
         let result = pipeline.process_event(event);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().category(), "Validation");
-        
+
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 1"));
         assert!(prometheus.contains("feedme_errors_total 1"));
     }
 
-    #[test] 
+    #[test]
     fn test_pii_redaction_non_object() {
         let mut stage = PIIRedaction::new(vec![regex::Regex::new(r"\d{3}-\d{2}-\d{4}").unwrap()]);
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string with SSN 123-45-6789"),
             metadata: None,
         };
-        
+
         let result = stage.execute(non_object_event).unwrap().unwrap();
-        assert_eq!(result.data, serde_json::json!("just a string with SSN 123-45-6789"));
+        assert_eq!(
+            result.data,
+            serde_json::json!("just a string with SSN 123-45-6789")
+        );
     }
 
     #[test]
     fn test_derived_fields_non_object() {
         use std::collections::HashMap;
         let mut derivations = HashMap::new();
-        derivations.insert("new_field".to_string(), Box::new(|_: &Event| serde_json::json!("derived")) as Box<dyn Fn(&Event) -> serde_json::Value>);
-        
+        derivations.insert(
+            "new_field".to_string(),
+            Box::new(|_: &Event| serde_json::json!("derived"))
+                as Box<dyn Fn(&Event) -> serde_json::Value>,
+        );
+
         let mut stage = DerivedFields::new(derivations);
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string"),
             metadata: None,
         };
-        
+
         let result = stage.execute(non_object_event).unwrap().unwrap();
         assert_eq!(result.data, serde_json::json!("just a string"));
     }
@@ -2227,12 +2423,12 @@ mod tests {
     #[test]
     fn test_required_fields_non_object() {
         let mut stage = RequiredFields::new(vec!["level".to_string()]);
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string"),
             metadata: None,
         };
-        
+
         let result = stage.execute(non_object_event).unwrap();
         assert!(result.is_some());
     }
@@ -2242,14 +2438,14 @@ mod tests {
         use std::collections::HashMap;
         let mut type_checks = HashMap::new();
         type_checks.insert("field".to_string(), "string".to_string());
-        
+
         let mut stage = TypeChecking::new(type_checks);
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string"),
             metadata: None,
         };
-        
+
         let result = stage.execute(non_object_event).unwrap();
         assert!(result.is_some());
     }
@@ -2258,15 +2454,18 @@ mod tests {
     fn test_value_constraints_non_object() {
         use std::collections::HashMap;
         let mut constraints = HashMap::new();
-        constraints.insert("field".to_string(), Box::new(|_: &serde_json::Value| true) as Box<dyn Fn(&serde_json::Value) -> bool>);
-        
+        constraints.insert(
+            "field".to_string(),
+            Box::new(|_: &serde_json::Value| true) as Box<dyn Fn(&serde_json::Value) -> bool>,
+        );
+
         let mut stage = ValueConstraints::new(constraints);
-        
+
         let non_object_event = Event {
             data: serde_json::json!("just a string"),
             metadata: None,
         };
-        
+
         let result = stage.execute(non_object_event).unwrap();
         assert!(result.is_some());
     }
@@ -2274,11 +2473,11 @@ mod tests {
     #[test]
     fn test_metrics_record_latency_new_stage() {
         let mut metrics = Metrics::new();
-        
+
         metrics.record_latency("stage1", 10.0);
         metrics.record_latency("stage2", 20.0);
         metrics.record_latency("stage1", 15.0);
-        
+
         let prometheus = metrics.to_prometheus();
         assert!(prometheus.contains("stage1"));
         assert!(prometheus.contains("stage2"));
@@ -2290,21 +2489,21 @@ mod tests {
     fn test_input_source_with_io_error_during_read() {
         use std::fs;
         use std::io::Write;
-        
+
         let temp_file = "test_io_error.ndjson";
         let mut file = fs::File::create(temp_file).unwrap();
         writeln!(file, r#"{{"level": "info"}}"#).unwrap();
         drop(file);
-        
+
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(StdoutOutput::new()));
-        
+
         let mut input = InputSource::File(temp_file.into());
         let mut deadletter: Option<&mut dyn Stage> = None;
-        
+
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_ok());
-        
+
         fs::remove_file(temp_file).unwrap();
     }
 
@@ -2312,14 +2511,14 @@ mod tests {
     fn test_pipeline_stage_latency_measurement() {
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string()])));
-        
+
         let event = Event {
             data: serde_json::json!({"level": "info", "extra": "removed"}),
             metadata: None,
         };
-        
+
         pipeline.process_event(event).unwrap();
-        
+
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_stage_latency_ms"));
         assert!(prometheus.contains("FieldSelect"));
@@ -2330,30 +2529,32 @@ mod tests {
         use std::fs;
         use std::io::Write;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let input_file = temp_dir.path().join("input.ndjson");
         let output_file = temp_dir.path().join("output.ndjson");
-        
+
         let mut file = fs::File::create(&input_file).unwrap();
         writeln!(file, r#"{{"level": "info", "message": "test"}}"#).unwrap();
         writeln!(file, r#"{{"level": "error", "message": "error"}}"#).unwrap();
         drop(file);
-        
+
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(Filter::new(Box::new(|e| e.get_string("level") == Some("info")))));
+        pipeline.add_stage(Box::new(Filter::new(Box::new(|e| {
+            e.get_string("level") == Some("info")
+        }))));
         pipeline.add_stage(Box::new(FileOutput::new(output_file.clone())));
-        
+
         let mut input = InputSource::File(input_file);
         let mut deadletter: Option<&mut dyn Stage> = None;
-        
+
         let result = input.process_input(&mut pipeline, &mut deadletter);
         assert!(result.is_ok());
-        
+
         let output_content = fs::read_to_string(&output_file).unwrap();
         assert!(output_content.contains("info"));
         assert!(!output_content.contains("error"));
-        
+
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("feedme_events_processed_total 2"));
         assert!(prometheus.contains("feedme_events_dropped_total 1"));
@@ -2363,15 +2564,18 @@ mod tests {
     fn test_value_constraints_missing_field() {
         use std::collections::HashMap;
         let mut constraints = HashMap::new();
-        constraints.insert("missing_field".to_string(), Box::new(|_: &serde_json::Value| true) as Box<dyn Fn(&serde_json::Value) -> bool>);
-        
+        constraints.insert(
+            "missing_field".to_string(),
+            Box::new(|_: &serde_json::Value| true) as Box<dyn Fn(&serde_json::Value) -> bool>,
+        );
+
         let mut stage = ValueConstraints::new(constraints);
-        
+
         let event = Event {
             data: serde_json::json!({"different_field": "value"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event).unwrap();
         assert!(result.is_some());
     }
@@ -2381,14 +2585,14 @@ mod tests {
         use std::collections::HashMap;
         let mut type_checks = HashMap::new();
         type_checks.insert("missing_field".to_string(), "string".to_string());
-        
+
         let mut stage = TypeChecking::new(type_checks);
-        
+
         let event = Event {
             data: serde_json::json!({"different_field": "value"}),
             metadata: None,
         };
-        
+
         let result = stage.execute(event).unwrap();
         assert!(result.is_some());
     }

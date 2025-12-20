@@ -12,7 +12,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // PII Redaction: redact emails and SSNs
     let email_pattern = regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")?;
     let ssn_pattern = regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b")?;
-    pipeline.add_stage(Box::new(PIIRedaction::new(vec![email_pattern, ssn_pattern])));
+    pipeline.add_stage(Box::new(PIIRedaction::new(vec![
+        email_pattern,
+        ssn_pattern,
+    ])));
 
     // Require fields: timestamp, level, message
     pipeline.add_stage(Box::new(RequiredFields::new(vec![
@@ -22,7 +25,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ])));
 
     // Output to file
-    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from("samples/processed.ndjson"))));
+    pipeline.add_stage(Box::new(FileOutput::new(PathBuf::from(
+        "samples/processed.ndjson",
+    ))));
 
     // Deadletter for errors
     let mut deadletter = Box::new(Deadletter::new(PathBuf::from("samples/deadletter.ndjson")));

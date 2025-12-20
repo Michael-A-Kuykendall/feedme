@@ -6,8 +6,11 @@ Cargo.lock
 archive/
 *.zip
 *.tar.gz
+*.crate
 *.html
 .claude/
 .copilot/
 **/.claude/
 **/.copilot/
+coverage/
+artifacts/

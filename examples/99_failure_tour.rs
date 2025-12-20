@@ -1,6 +1,8 @@
-use feedme::{Pipeline, FieldSelect, RequiredFields, PIIRedaction, StdoutOutput, InputSource, Stage};
-use std::path::PathBuf;
+use feedme::{
+    FieldSelect, InputSource, PIIRedaction, Pipeline, RequiredFields, Stage, StdoutOutput,
+};
 use regex::Regex;
+use std::path::PathBuf;
 
 /// Failure Tour: Demonstrates what happens when things go wrong
 ///
@@ -10,7 +12,9 @@ use regex::Regex;
 /// Run with: cargo run --example 99_failure_tour
 fn main() -> anyhow::Result<()> {
     println!("=== FeedMe Failure Tour ===\n");
-    println!("This example demonstrates FeedMe's error handling by intentionally causing failures.\n");
+    println!(
+        "This example demonstrates FeedMe's error handling by intentionally causing failures.\n"
+    );
 
     // Create a pipeline that will encounter various errors
     let mut pipeline = Pipeline::new();
@@ -20,7 +24,10 @@ fn main() -> anyhow::Result<()> {
     pipeline.add_stage(Box::new(PIIRedaction::new(patterns)));
 
     // Add field selection (will work on objects)
-    pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+    pipeline.add_stage(Box::new(FieldSelect::new(vec![
+        "level".to_string(),
+        "message".to_string(),
+    ])));
 
     // Add required fields validation (will reject missing fields)
     pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));

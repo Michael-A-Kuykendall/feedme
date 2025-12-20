@@ -9,7 +9,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Filter: keep only warn and error
     pipeline.add_stage(Box::new(Filter::new(Box::new(|event: &Event| {
-        event.get_string("level").map_or(false, |level| level != "debug")
+        event
+            .get_string("level")
+            .map_or(false, |level| level != "debug")
     }))));
 
     // Output to stdout

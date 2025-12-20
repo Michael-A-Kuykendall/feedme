@@ -25,7 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = PluginRegistry::new();
 
     // Register custom stage
-    registry.register("uppercase".to_string(), Box::new(|| Box::new(UppercaseMessage)));
+    registry.register(
+        "uppercase".to_string(),
+        Box::new(|| Box::new(UppercaseMessage)),
+    );
 
     // Build pipeline using plugin
     let mut pipeline = Pipeline::new();
