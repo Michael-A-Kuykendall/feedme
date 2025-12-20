@@ -23,9 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Filter out debug
     pipeline.add_stage(Box::new(Filter::new(Box::new(|event: &Event| {
-        event
-            .get_string("level")
-            .map_or(true, |level| level != "debug")
+        event.get_string("level") != Some("debug")
     }))));
 
     // Remap fields

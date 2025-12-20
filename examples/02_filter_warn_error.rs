@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline.add_stage(Box::new(Filter::new(Box::new(|event: &Event| {
         event
             .get_string("level")
-            .map_or(false, |level| level != "debug")
+            .is_some_and(|level| level != "debug")
     }))));
 
     // Output to stdout

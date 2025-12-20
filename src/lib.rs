@@ -48,10 +48,10 @@
 //!     pipeline.add_stage(Box::new(StdoutOutput::new()));
 //!
 //!     // Deadletter for errors
-//!     let mut deadletter = Deadletter::new(PathBuf::from("errors.ndjson"));
+//!     let mut deadletter = Deadletter::new(PathBuf::from("samples/errors.ndjson"));
 //!
 //!     // Process input file
-//!     let mut input = InputSource::File(PathBuf::from("input.ndjson"));
+//!     let mut input = InputSource::File(PathBuf::from("samples/input.ndjson"));
 //!     input.process_input(&mut pipeline, &mut Some(&mut deadletter))?;
 //!
 //!     // Export final metrics
@@ -514,7 +514,7 @@ impl Default for Metrics {
 }
 
 /// Stage contract: ownership-based execution.
-/// Takes Event, returns Option<Event>, with explicit drop semantics.
+/// Takes `Event`, returns `Option<Event>`, with explicit drop semantics.
 pub trait Stage {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError>;
     fn name(&self) -> &str;
@@ -1686,7 +1686,7 @@ mod tests {
         };
         pipeline.process_event(event).unwrap();
         let json_logs = pipeline.export_json_logs();
-        assert!(json_logs.len() > 0);
+        assert!(!json_logs.is_empty());
         assert!(json_logs.iter().any(|s| s.contains("events_processed")));
         let prometheus = pipeline.export_prometheus();
         assert!(prometheus.contains("# HELP feedme_events_processed_total"));
@@ -1871,7 +1871,7 @@ mod tests {
         };
         pipeline.process_event(event).unwrap();
         let json_logs = pipeline.export_json_logs();
-        assert!(json_logs.len() > 0);
+        assert!(!json_logs.is_empty());
         // Check that JSON logs contain expected structure
         let first_log: serde_json::Value = serde_json::from_str(&json_logs[0]).unwrap();
         assert_eq!(first_log["metric"], "events_processed");
@@ -2301,7 +2301,7 @@ mod tests {
         let input_stdin = InputSource::Stdin;
         match input_stdin {
             InputSource::Stdin => {
-                assert!(true);
+                // Test passes if we reach here
             }
             _ => panic!("Should be Stdin variant"),
         }
@@ -2399,7 +2399,7 @@ mod tests {
         let mut stage = StdoutOutput::new();
 
         let event_with_infinite = Event {
-            data: serde_json::json!({"value": std::f64::INFINITY}),
+            data: serde_json::json!({"value": f64::INFINITY}),
             metadata: None,
         };
 
@@ -2537,7 +2537,6 @@ mod tests {
         match input {
             InputSource::Stdin => {
                 // Test that we can create the variant
-                assert!(true);
             }
             _ => panic!("Should be Stdin"),
         }

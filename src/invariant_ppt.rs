@@ -1,3 +1,4 @@
+#[cfg(any(test, feature = "invariant-ppt"))]
 use std::collections::BTreeSet;
 
 #[cfg(any(test, feature = "invariant-ppt"))]
@@ -39,7 +40,6 @@ pub fn assert_invariant(condition: bool, message: &'static str, context: Option<
                     .unwrap_or_default()
             );
         }
-        return;
     }
 
     #[cfg(not(any(test, feature = "invariant-ppt")))]
