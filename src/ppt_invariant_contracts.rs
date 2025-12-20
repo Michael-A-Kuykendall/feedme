@@ -1,5 +1,5 @@
 use crate::invariant_ppt;
-use crate::{Event, Pipeline, PipelineError, Stage, StdoutOutput, InputSource};
+use crate::{Event, Pipeline, PipelineError, Stage, StdoutOutput, InputSource, Filter, RequiredFields};
 
 struct Passthrough;
 
@@ -153,4 +153,29 @@ fn contract_directory_determinism() {
     let output2 = run1();
 
     assert_eq!(output1, output2);
+}
+
+#[test]
+fn contract_no_output_after_drop() {
+    // Once a stage returns None, no subsequent stages execute for that event
+    invariant_ppt::clear_invariant_log();
+
+    let mut pipeline = Pipeline::new();
+    // Add a stage that drops, then a stage that would fail if executed
+    pipeline.add_stage(Box::new(Filter::new(Box::new(|_| false)))); // Always drops
+    pipeline.add_stage(Box::new(RequiredFields::new(vec!["nonexistent".into()]))); // Would fail
+
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).unwrap();
+    let result = pipeline.process_event(event).unwrap();
+    assert!(result.is_none()); // Event was dropped
+
+    // If RequiredFields executed, it would have failed, but it didn't
+    // This contract ensures the drop short-circuits execution
+    invariant_ppt::contract_test(
+        "no output after drop",
+        &[
+            crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
+            crate::INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE,
+        ],
+    );
 }

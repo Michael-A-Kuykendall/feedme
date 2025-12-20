@@ -1,7 +1,10 @@
-//! Optional replay harness for deterministic testing.
+//! # Replay Harness (Testing & Debugging Only)
 //!
 //! This module provides utilities to record and replay pipeline executions
 //! for testing purposes, ensuring deterministic behavior.
+//!
+//! **Note:** This is not a reprocessing or audit system. It's a confidence
+//! tool for verifying that pipelines behave identically across runs.
 
 use crate::{Event, Pipeline};
 use serde::{Deserialize, Serialize};

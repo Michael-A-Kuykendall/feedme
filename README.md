@@ -5,7 +5,7 @@
 <h1 align="center">FeedMe</h1>
 
 <p align="center">
-  <strong>An embeddable, deterministic ingest engine for Rust</strong>
+  <strong>FeedMe is a deterministic, linear, streaming ingest pipeline with mechanical guarantees around memory, ordering, and failure.</strong>
 </p>
 
 <p align="center">
@@ -39,6 +39,16 @@ Perfect for **ETL**, **log processing**, **data cleaning**, and **real-time inge
 - **Structured errors** — stage, code, and message for every failure
 - **Observability** — metrics exportable (Prometheus or JSON) without affecting execution
 - **Extensible** — add custom stages via a defined plugin contract
+
+## FeedMe Guarantees
+
+FeedMe provides these mechanical guarantees:
+
+- Events are processed strictly in input order
+- Memory usage is bounded and input-size independent
+- Stages cannot observe shared or mutated state
+- Validation failures cannot be silently ignored
+- Metrics collection cannot influence execution
 
 ## Why FeedMe is Not X
 
@@ -84,7 +94,14 @@ cargo add feedme serde_json regex
 
 ## Quick Start
 
-Here's a complete, runnable example that demonstrates the full pipeline: ingest messy data, redact PII, validate required fields, filter unwanted events, output clean data, handle errors via deadletter, and export metrics.
+Here's a 12-line pipeline that:
+
+* ingests logs
+* redacts PII
+* validates schema
+* filters noise
+* guarantees determinism
+* and fails safely
 
 ```rust
 use feedme::{
