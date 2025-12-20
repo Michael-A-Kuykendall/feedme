@@ -63,7 +63,7 @@ No long-running services or auto-restart. FeedMe is a library you embed in your 
 
 ## Invariants
 
-FeedMe enforces **12 non-negotiable behavioral guarantees** that are tested mechanically. These invariants ensure reliability and prevent regressions. See [docs/invariants.md](docs/invariants.md) for the complete list.
+FeedMe enforces **mechanical behavioral guarantees** that are tested via runtime assertions and contract tests. These invariants ensure reliability and prevent regressions.
 
 ## Installation
 
@@ -84,19 +84,70 @@ cargo add feedme serde_json regex
 
 ## Quick Start
 
+Here's a complete, runnable example that demonstrates the full pipeline: ingest messy data, redact PII, validate required fields, filter unwanted events, output clean data, handle errors via deadletter, and export metrics.
+
 ```rust
-use feedme::{Pipeline, FieldSelect, RequiredFields, StdoutOutput, InputSource, Stage};
+use feedme::{
+    Pipeline, FieldSelect, RequiredFields, StdoutOutput, Deadletter,
+    PIIRedaction, Filter, InputSource, Stage
+};
 use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
-    // Build a simple pipeline: select level & message fields, require level, then output
+    // Create pipeline: select fields → redact PII → require fields → filter → output
     let mut pipeline = Pipeline::new();
-    pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".into(), "message".into()])));
+    pipeline.add_stage(Box::new(FieldSelect::new(vec![
+        "timestamp".into(), "level".into(), "message".into(), "email".into()
+    ])));
+    pipeline.add_stage(Box::new(PIIRedaction::new(vec!["email".into()])));
     pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".into()])));
+    pipeline.add_stage(Box::new(Filter::new(Box::new(|event| {
+        event.get("level").and_then(|v| v.as_str()) != Some("debug")
+    }))));
     pipeline.add_stage(Box::new(StdoutOutput::new()));
 
+    // Deadletter for errors
+    let mut deadletter = Deadletter::new(PathBuf::from("errors.ndjson"));
+
+    // Process input file
     let mut input = InputSource::File(PathBuf::from("input.ndjson"));
-    let mut deadletter: Option<&mut dyn Stage> = None;
+    input.process_input(&mut pipeline, &mut Some(&mut deadletter))?;
+
+    // Export final metrics
+    println!("Pipeline complete. Metrics:");
+    for metric in pipeline.export_json_logs() {
+        println!("{}", serde_json::to_string(&metric)?);
+    }
+
+    Ok(())
+}
+```
+
+**Input** (`input.ndjson`):
+```
+{"timestamp":"2023-10-01T10:00:00Z","level":"info","message":"User logged in","email":"user@example.com"}
+{"level":"debug","message":"Debug info"}
+{"message":"Missing level"}
+```
+
+**Output** (stdout):
+```
+{"timestamp":"2023-10-01T10:00:00Z","level":"info","message":"User logged in","email":"[REDACTED]"}
+```
+
+**Deadletter** (`errors.ndjson`):
+```
+{"error":{"stage":"RequiredFields","code":"MISSING_FIELD","message":"Required field 'level' is missing"},"raw":"{\"message\":\"Missing level\"}"}
+```
+
+**Metrics** (JSON logs):
+```
+{"metric":"events_processed","value":2}
+{"metric":"events_dropped","value":1}
+{"metric":"errors","value":1}
+{"metric":"stage_latencies","stage":"FieldSelect","count":3,"sum":0.05,"min":0.01,"max":0.02}
+...
+```
 
     input.process_input(&mut pipeline, &mut deadletter)?;
     println!("Example finished — metrics: {:?}", pipeline.export_json_logs());
@@ -190,7 +241,14 @@ FeedMe is designed for high-throughput, low-latency data processing:
 
 ## 🛡️ Invariants
 
-FeedMe enforces **12 non-negotiable behavioral guarantees** that are tested mechanically. These invariants ensure reliability and prevent regressions. See [docs/invariants.md](docs/invariants.md) for the complete list.
+FeedMe enforces **mechanical behavioral guarantees** that are tested via runtime assertions and contract tests. These invariants ensure reliability and prevent regressions. Key guarantees include:
+
+- **Metrics purity**: Exporting metrics doesn't affect pipeline state
+- **Drop counting rules**: Events are only counted as dropped under specific conditions  
+- **Latency recording**: Successful stage execution always records timing
+- **Directory determinism**: Same directory input produces identical output
+
+See [src/ppt_invariant_contracts.rs](src/ppt_invariant_contracts.rs) for the complete contract test suite.
 
 ## 🚫 Non-Goals
 

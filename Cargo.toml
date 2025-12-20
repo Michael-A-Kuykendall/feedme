@@ -36,6 +36,10 @@ invariant-ppt = []
 [dev-dependencies]
 tempfile = "3.0"
 
+[[bin]]
+name = "quickstart"
+path = "test_quickstart.rs"
+
 [[example]]
 name = "01_redact_validate_deadletter"
 path = "examples/01_redact_validate_deadletter.rs"

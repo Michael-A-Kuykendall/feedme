@@ -1,5 +1,5 @@
 use crate::invariant_ppt;
-use crate::{Event, Pipeline, PipelineError, Stage};
+use crate::{Event, Pipeline, PipelineError, Stage, StdoutOutput, InputSource};
 
 struct Passthrough;
 
@@ -115,4 +115,42 @@ fn metrics_export_is_pure() {
     let ja = pipeline.export_json_logs();
     let jb = pipeline.export_json_logs();
     assert_eq!(ja, jb);
+}
+
+#[test]
+fn contract_directory_determinism() {
+    use std::fs;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    // Create a temp directory with files
+    let temp_dir = TempDir::new().unwrap();
+    let file1_path = temp_dir.path().join("file1.ndjson");
+    let file2_path = temp_dir.path().join("file2.ndjson");
+
+    {
+        let mut file1 = fs::File::create(&file1_path).unwrap();
+        writeln!(file1, r#"{{"level":"info","message":"first"}}"#).unwrap();
+    }
+    {
+        let mut file2 = fs::File::create(&file2_path).unwrap();
+        writeln!(file2, r#"{{"level":"info","message":"second"}}"#).unwrap();
+    }
+
+    // Process directory twice
+    let run1 = || {
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(Passthrough));
+        pipeline.add_stage(Box::new(StdoutOutput::new()));
+
+        let mut input = InputSource::Directory(temp_dir.path().to_path_buf());
+        input.process_input(&mut pipeline, &mut None).unwrap();
+        // Only compare non-timing metrics
+        pipeline.export_json_logs().into_iter().filter(|s| !s.contains("stage_latencies")).collect::<Vec<_>>()
+    };
+
+    let output1 = run1();
+    let output2 = run1();
+
+    assert_eq!(output1, output2);
 }

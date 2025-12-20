@@ -12,6 +12,8 @@ pub mod invariant_ppt;
 #[cfg(test)]
 mod ppt_invariant_contracts;
 
+pub mod replay;
+
 pub(crate) const INVARIANT_PROCESSED_INCREMENTS_ONCE: &str =
     "processed increments exactly once per process_event";
 pub(crate) const INVARIANT_ERRORS_INCREMENT_ON_ERROR: &str = "errors increment exactly once per error";
@@ -104,13 +106,13 @@ impl PipelineError {
         }
     }
 
-    pub fn code(&self) -> &str {
+    pub fn code(&self) -> String {
         match self {
-            PipelineError::Parse(e) => &e.code,
-            PipelineError::Transform(e) => &e.code,
-            PipelineError::Validation(e) => &e.code,
-            PipelineError::Output(e) => &e.code,
-            PipelineError::System(e) => &e.code,
+            PipelineError::Parse(e) => e.code.to_string(),
+            PipelineError::Transform(e) => e.code.to_string(),
+            PipelineError::Validation(e) => e.code.to_string(),
+            PipelineError::Output(e) => e.code.to_string(),
+            PipelineError::System(e) => e.code.to_string(),
         }
     }
 
@@ -127,38 +129,127 @@ impl PipelineError {
 
 impl std::error::Error for PipelineError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseErrorCode {
+    ParseError,
+    Utf8Error,
+    JsonError,
+    Test,
+}
+
+impl fmt::Display for ParseErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseErrorCode::ParseError => write!(f, "PARSE_ERROR"),
+            ParseErrorCode::Utf8Error => write!(f, "UTF8_ERROR"),
+            ParseErrorCode::JsonError => write!(f, "JSON_ERROR"),
+            ParseErrorCode::Test => write!(f, "TEST"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParseError {
     pub stage: String,
-    pub code: String,
+    pub code: ParseErrorCode,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransformErrorCode {
+    MissingField,
+    TypeMismatch,
+    ConstraintViolation,
+    Test,
+}
+
+impl fmt::Display for TransformErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransformErrorCode::MissingField => write!(f, "MISSING_FIELD"),
+            TransformErrorCode::TypeMismatch => write!(f, "TYPE_MISMATCH"),
+            TransformErrorCode::ConstraintViolation => write!(f, "CONSTRAINT_VIOLATION"),
+            TransformErrorCode::Test => write!(f, "TEST"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct TransformError {
     pub stage: String,
-    pub code: String,
+    pub code: TransformErrorCode,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValidationErrorCode {
+    MissingField,
+    TypeMismatch,
+    ConstraintViolation,
+    Test,
+}
+
+impl fmt::Display for ValidationErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValidationErrorCode::MissingField => write!(f, "MISSING_FIELD"),
+            ValidationErrorCode::TypeMismatch => write!(f, "TYPE_MISMATCH"),
+            ValidationErrorCode::ConstraintViolation => write!(f, "CONSTRAINT_VIOLATION"),
+            ValidationErrorCode::Test => write!(f, "TEST"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ValidationError {
     pub stage: String,
-    pub code: String,
+    pub code: ValidationErrorCode,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputErrorCode {
+    SerializeError,
+    IoError,
+    Test,
+}
+
+impl fmt::Display for OutputErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OutputErrorCode::SerializeError => write!(f, "SERIALIZE_ERROR"),
+            OutputErrorCode::IoError => write!(f, "IO_ERROR"),
+            OutputErrorCode::Test => write!(f, "TEST"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct OutputError {
     pub stage: String,
-    pub code: String,
+    pub code: OutputErrorCode,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SystemErrorCode {
+    IoError,
+    Test,
+}
+
+impl fmt::Display for SystemErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SystemErrorCode::IoError => write!(f, "IO_ERROR"),
+            SystemErrorCode::Test => write!(f, "TEST"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct SystemError {
     pub stage: String,
-    pub code: String,
+    pub code: SystemErrorCode,
     pub message: String,
 }
 
@@ -520,7 +611,7 @@ impl InputSource {
                     let line = line.map_err(|e| {
                         PipelineError::System(SystemError {
                             stage: "Input_Stdin".to_string(),
-                            code: "IO_ERROR".to_string(),
+                            code: SystemErrorCode::IoError,
                             message: e.to_string(),
                         })
                     })?;
@@ -542,7 +633,7 @@ impl InputSource {
                             } else {
                                 return Err(PipelineError::Parse(ParseError {
                                     stage: "Input_Stdin".to_string(),
-                                    code: "PARSE_ERROR".to_string(),
+                                    code: ParseErrorCode::ParseError,
                                     message: e.to_string(),
                                 }));
                             }
@@ -577,7 +668,7 @@ impl InputSource {
                 let file = fs::File::open(path).map_err(|e| {
                     PipelineError::System(SystemError {
                         stage: "Input_File".to_string(),
-                        code: "IO_ERROR".to_string(),
+                        code: SystemErrorCode::IoError,
                         message: e.to_string(),
                     })
                 })?;
@@ -586,7 +677,7 @@ impl InputSource {
                     let line = line.map_err(|e| {
                         PipelineError::System(SystemError {
                             stage: "Input_File".to_string(),
-                            code: "IO_ERROR".to_string(),
+                            code: SystemErrorCode::IoError,
                             message: e.to_string(),
                         })
                     })?;
@@ -608,7 +699,7 @@ impl InputSource {
                             } else {
                                 return Err(PipelineError::Parse(ParseError {
                                     stage: "Input_File".to_string(),
-                                    code: "PARSE_ERROR".to_string(),
+                                    code: ParseErrorCode::ParseError,
                                     message: e.to_string(),
                                 }));
                             }
@@ -643,7 +734,7 @@ impl InputSource {
                 let entries = fs::read_dir(dir).map_err(|e| {
                     PipelineError::System(SystemError {
                         stage: "Input_Directory".to_string(),
-                        code: "IO_ERROR".to_string(),
+                        code: SystemErrorCode::IoError,
                         message: e.to_string(),
                     })
                 })?;
@@ -652,7 +743,7 @@ impl InputSource {
                     let entry = entry.map_err(|e| {
                         PipelineError::System(SystemError {
                             stage: "Input_Directory".to_string(),
-                            code: "IO_ERROR".to_string(),
+                            code: SystemErrorCode::IoError,
                             message: e.to_string(),
                         })
                     })?;
@@ -686,14 +777,14 @@ impl Parser for NDJSONParser {
         let s = std::str::from_utf8(raw).map_err(|e| {
             PipelineError::Parse(ParseError {
                 stage: "NDJSON".to_string(),
-                code: "UTF8_ERROR".to_string(),
+                code: ParseErrorCode::Utf8Error,
                 message: e.to_string(),
             })
         })?;
         Event::from_raw_input(s).map_err(|e| {
             PipelineError::Parse(ParseError {
                 stage: "NDJSON".to_string(),
-                code: "JSON_ERROR".to_string(),
+                code: ParseErrorCode::JsonError,
                 message: e.to_string(),
             })
         })
@@ -707,14 +798,14 @@ impl Parser for JSONArrayParser {
         let s = std::str::from_utf8(raw).map_err(|e| {
             PipelineError::Parse(ParseError {
                 stage: "JSONArray".to_string(),
-                code: "UTF8_ERROR".to_string(),
+                code: ParseErrorCode::Utf8Error,
                 message: e.to_string(),
             })
         })?;
         let value: serde_json::Value = serde_json::from_str(s).map_err(|e| {
             PipelineError::Parse(ParseError {
                 stage: "JSONArray".to_string(),
-                code: "JSON_ERROR".to_string(),
+                code: ParseErrorCode::JsonError,
                 message: e.to_string(),
             })
         })?;
@@ -734,7 +825,7 @@ impl Parser for SyslogParser {
         let s = std::str::from_utf8(raw).map_err(|e| {
             PipelineError::Parse(ParseError {
                 stage: "Syslog".to_string(),
-                code: "UTF8_ERROR".to_string(),
+                code: ParseErrorCode::Utf8Error,
                 message: e.to_string(),
             })
         })?;
@@ -920,7 +1011,7 @@ impl Stage for RequiredFields {
                 if !map.contains_key(field) {
                     return Err(PipelineError::Validation(ValidationError {
                         stage: "RequiredFields".to_string(),
-                        code: "MISSING_FIELD".to_string(),
+                        code: ValidationErrorCode::MissingField,
                         message: format!("Missing required field: {}", field),
                     }));
                 }
@@ -962,7 +1053,7 @@ impl Stage for TypeChecking {
                     if actual_type != expected_type {
                         return Err(PipelineError::Validation(ValidationError {
                             stage: "TypeChecking".to_string(),
-                            code: "TYPE_MISMATCH".to_string(),
+                            code: ValidationErrorCode::TypeMismatch,
                             message: format!(
                                 "Field {} expected {} but got {}",
                                 field, expected_type, actual_type
@@ -1000,7 +1091,7 @@ impl Stage for ValueConstraints {
                     if !check(value) {
                         return Err(PipelineError::Validation(ValidationError {
                             stage: "ValueConstraints".to_string(),
-                            code: "CONSTRAINT_VIOLATION".to_string(),
+                            code: ValidationErrorCode::ConstraintViolation,
                             message: format!("Field {} violates constraint", field),
                         }));
                     }
@@ -1035,7 +1126,7 @@ impl Stage for StdoutOutput {
             "{}",
             serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
                 stage: "Stdout".to_string(),
-                code: "SERIALIZE_ERROR".to_string(),
+                code: OutputErrorCode::SerializeError,
                 message: e.to_string(),
             }))?
         );
@@ -1079,7 +1170,7 @@ impl Stage for FileOutput {
             .map_err(|e| {
                 PipelineError::Output(OutputError {
                     stage: "File".to_string(),
-                    code: "IO_ERROR".to_string(),
+                    code: OutputErrorCode::IoError,
                     message: e.to_string(),
                 })
             })?;
@@ -1088,14 +1179,14 @@ impl Stage for FileOutput {
             "{}",
             serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
                 stage: "File".to_string(),
-                code: "SERIALIZE_ERROR".to_string(),
+                code: OutputErrorCode::SerializeError,
                 message: e.to_string(),
             }))?
         )
         .map_err(|e| {
             PipelineError::Output(OutputError {
                 stage: "File".to_string(),
-                code: "IO_ERROR".to_string(),
+                code: OutputErrorCode::IoError,
                 message: e.to_string(),
             })
         })?;
@@ -1133,7 +1224,7 @@ impl Stage for Deadletter {
             .map_err(|e| {
                 PipelineError::Output(OutputError {
                     stage: "Deadletter".to_string(),
-                    code: "IO_ERROR".to_string(),
+                    code: OutputErrorCode::IoError,
                     message: e.to_string(),
                 })
             })?;
@@ -1142,14 +1233,14 @@ impl Stage for Deadletter {
             "{}",
             serde_json::to_string(&event).map_err(|e| PipelineError::Output(OutputError {
                 stage: "Deadletter".to_string(),
-                code: "SERIALIZE_ERROR".to_string(),
+                code: OutputErrorCode::SerializeError,
                 message: e.to_string(),
             }))?
         )
         .map_err(|e| {
             PipelineError::Output(OutputError {
                 stage: "Deadletter".to_string(),
-                code: "IO_ERROR".to_string(),
+                code: OutputErrorCode::IoError,
                 message: e.to_string(),
             })
         })?;
@@ -1540,7 +1631,7 @@ mod tests {
     fn test_error_taxonomy() {
         let parse_err = PipelineError::Parse(ParseError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: ParseErrorCode::Test,
             message: "test".to_string(),
         });
         assert_eq!(parse_err.category(), "Parse");
@@ -1550,42 +1641,42 @@ mod tests {
 
         let transform_err = PipelineError::Transform(TransformError {
             stage: "transform_test".to_string(),
-            code: "TRANSFORM_TEST".to_string(),
+            code: TransformErrorCode::Test,
             message: "transform test".to_string(),
         });
         assert_eq!(transform_err.category(), "Transform");
         assert_eq!(transform_err.stage(), "transform_test");
-        assert_eq!(transform_err.code(), "TRANSFORM_TEST");
+        assert_eq!(transform_err.code(), "TEST");
         assert_eq!(transform_err.message(), "transform test");
 
         let validation_err = PipelineError::Validation(ValidationError {
             stage: "validation_test".to_string(),
-            code: "VALIDATION_TEST".to_string(),
+            code: ValidationErrorCode::Test,
             message: "validation test".to_string(),
         });
         assert_eq!(validation_err.category(), "Validation");
         assert_eq!(validation_err.stage(), "validation_test");
-        assert_eq!(validation_err.code(), "VALIDATION_TEST");
+        assert_eq!(validation_err.code(), "TEST");
         assert_eq!(validation_err.message(), "validation test");
 
         let output_err = PipelineError::Output(OutputError {
             stage: "output_test".to_string(),
-            code: "OUTPUT_TEST".to_string(),
+            code: OutputErrorCode::Test,
             message: "output test".to_string(),
         });
         assert_eq!(output_err.category(), "Output");
         assert_eq!(output_err.stage(), "output_test");
-        assert_eq!(output_err.code(), "OUTPUT_TEST");
+        assert_eq!(output_err.code(), "TEST");
         assert_eq!(output_err.message(), "output test");
 
         let system_err = PipelineError::System(SystemError {
             stage: "system_test".to_string(),
-            code: "SYSTEM_TEST".to_string(),
+            code: SystemErrorCode::Test,
             message: "system test".to_string(),
         });
         assert_eq!(system_err.category(), "System");
         assert_eq!(system_err.stage(), "system_test");
-        assert_eq!(system_err.code(), "SYSTEM_TEST");
+        assert_eq!(system_err.code(), "TEST");
         assert_eq!(system_err.message(), "system test");
     }
 
@@ -1745,7 +1836,7 @@ mod tests {
     fn test_pipeline_error_display() {
         let parse_err = PipelineError::Parse(ParseError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: ParseErrorCode::Test,
             message: "test message".to_string(),
         });
         let display = format!("{}", parse_err);
@@ -1753,7 +1844,7 @@ mod tests {
 
         let transform_err = PipelineError::Transform(TransformError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: TransformErrorCode::Test,
             message: "transform message".to_string(),
         });
         let display = format!("{}", transform_err);
@@ -1923,7 +2014,7 @@ mod tests {
     fn test_pipeline_error_std_error_trait() {
         let error = PipelineError::Parse(ParseError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: ParseErrorCode::Test,
             message: "test error".to_string(),
         });
 
@@ -2116,7 +2207,7 @@ mod tests {
     fn test_all_pipeline_error_display_variants() {
         let validation_err = PipelineError::Validation(ValidationError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: ValidationErrorCode::Test,
             message: "validation test".to_string(),
         });
         assert_eq!(
@@ -2126,14 +2217,14 @@ mod tests {
 
         let output_err = PipelineError::Output(OutputError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: OutputErrorCode::Test,
             message: "output test".to_string(),
         });
         assert_eq!(format!("{}", output_err), "Output error: output test");
 
         let system_err = PipelineError::System(SystemError {
             stage: "test".to_string(),
-            code: "TEST".to_string(),
+            code: SystemErrorCode::Test,
             message: "system test".to_string(),
         });
         assert_eq!(format!("{}", system_err), "System error: system test");
