@@ -1,0 +1,15 @@
+{"timestamp":"2023-10-01T10:00:00Z","level":"info","message":"User logged in","email":"user@example.com","user_id":123}
+{"timestamp":"2023-10-01T10:01:00Z","level":"warn","message":"High CPU usage","ssn":"123-45-6789","user_id":456}
+{"timestamp":"2023-10-01T10:02:00Z","level":"error","message":"Database connection failed","email":"admin@company.com","user_id":789}
+{"timestamp":"2023-10-01T10:03:00Z","level":"debug","message":"Debug info","user_id":101}
+{"timestamp":"2023-10-01T10:04:00Z","level":"debug","message":"More debug","user_id":102}
+{"level":"info","message":"Missing timestamp","email":"test@test.com","user_id":103}
+{"timestamp":"2023-10-01T10:05:00Z","level":"info","message":"Another event","user_id":104}
+{"timestamp":"2023-10-01T10:06:00Z","level":"warn","message":"Warning event","ssn":"987-65-4321","user_id":105}
+{"level":"error","message":"Missing timestamp too","user_id":106}
+{"timestamp":"2023-10-01T10:07:00Z","level":"info","message":"Valid event","user_id":107}
+{invalid json line}
+{"timestamp":"2023-10-01T10:08:00Z","level":"info","message":"Another valid","user_id":108}
+also invalid
+{"timestamp":"2023-10-01T10:09:00Z","level":"error","message":"Error with PII","email":"error@domain.com","user_id":109}
+{"timestamp":"2023-10-01T10:10:00Z","level":"info","message":"Huge line: " + "x".repeat(10000),"user_id":110}

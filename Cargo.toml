@@ -1,0 +1,60 @@
+[package]
+name = "feedme"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+anyhow = "1.0"
+regex = "1.0"
+
+[[example]]
+name = "01_redact_validate_deadletter"
+path = "examples/01_redact_validate_deadletter.rs"
+
+[[example]]
+name = "02_filter_warn_error"
+path = "examples/02_filter_warn_error.rs"
+
+[[example]]
+name = "03_field_projection"
+path = "examples/03_field_projection.rs"
+
+[[example]]
+name = "04_directory_ingest"
+path = "examples/04_directory_ingest.rs"
+
+[[example]]
+name = "05_custom_stage"
+path = "examples/05_custom_stage.rs"
+
+[[example]]
+name = "06_syslog_parsing"
+path = "examples/06_syslog_parsing.rs"
+
+[[example]]
+name = "07_metrics_export_demo"
+path = "examples/07_metrics_export_demo.rs"
+
+[[example]]
+name = "08_stdin_streaming"
+path = "examples/08_stdin_streaming.rs"
+
+[[example]]
+name = "09_complex_pipeline"
+path = "examples/09_complex_pipeline.rs"
+
+[[example]]
+name = "10_plugin_usage"
+path = "examples/10_plugin_usage.rs"
+
+[[example]]
+name = "11_config_driven_pipeline"
+path = "examples/11_config_driven_pipeline.rs"
+
+[[example]]
+name = "12_error_handling_variations"
+path = "examples/12_error_handling_variations.rs"

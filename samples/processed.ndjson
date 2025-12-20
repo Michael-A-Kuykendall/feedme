@@ -1,0 +1,30 @@
+{"email":"[REDACTED]","level":"info","message":"User logged in","timestamp":"2023-10-01T10:00:00Z","user_id":123}
+{"level":"warn","message":"High CPU usage","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user_id":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","timestamp":"2023-10-01T10:02:00Z","user_id":789}
+{"level":"debug","message":"Debug info","timestamp":"2023-10-01T10:03:00Z","user_id":101}
+{"level":"debug","message":"More debug","timestamp":"2023-10-01T10:04:00Z","user_id":102}
+{"email":"[REDACTED]","level":"info","message":"User logged in","timestamp":"2023-10-01T10:00:00Z","user_id":123}
+{"level":"warn","message":"High CPU usage","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user_id":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","timestamp":"2023-10-01T10:02:00Z","user_id":789}
+{"level":"debug","message":"Debug info","timestamp":"2023-10-01T10:03:00Z","user_id":101}
+{"level":"debug","message":"More debug","timestamp":"2023-10-01T10:04:00Z","user_id":102}
+{"email":"[REDACTED]","level":"info","message":"User logged in","timestamp":"2023-10-01T10:00:00Z","user_id":123}
+{"level":"warn","message":"High CPU usage","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user_id":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","timestamp":"2023-10-01T10:02:00Z","user_id":789}
+{"level":"debug","message":"Debug info","timestamp":"2023-10-01T10:03:00Z","user_id":101}
+{"level":"debug","message":"More debug","timestamp":"2023-10-01T10:04:00Z","user_id":102}
+{"level":"info","message":"Another event","timestamp":"2023-10-01T10:05:00Z","user_id":104}
+{"level":"warn","message":"Warning event","ssn":"[REDACTED]","timestamp":"2023-10-01T10:06:00Z","user_id":105}
+{"level":"info","message":"Valid event","timestamp":"2023-10-01T10:07:00Z","user_id":107}
+{"level":"info","message":"Another valid","timestamp":"2023-10-01T10:08:00Z","user_id":108}
+{"email":"[REDACTED]","level":"error","message":"Error with PII","timestamp":"2023-10-01T10:09:00Z","user_id":109}
+{"email":"[REDACTED]","level":"info","message":"User logged in","timestamp":"2023-10-01T10:00:00Z","user_id":123}
+{"level":"warn","message":"High CPU usage","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user_id":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","timestamp":"2023-10-01T10:02:00Z","user_id":789}
+{"level":"debug","message":"Debug info","timestamp":"2023-10-01T10:03:00Z","user_id":101}
+{"level":"debug","message":"More debug","timestamp":"2023-10-01T10:04:00Z","user_id":102}
+{"level":"info","message":"Another event","timestamp":"2023-10-01T10:05:00Z","user_id":104}
+{"level":"warn","message":"Warning event","ssn":"[REDACTED]","timestamp":"2023-10-01T10:06:00Z","user_id":105}
+{"level":"info","message":"Valid event","timestamp":"2023-10-01T10:07:00Z","user_id":107}
+{"level":"info","message":"Another valid","timestamp":"2023-10-01T10:08:00Z","user_id":108}
+{"email":"[REDACTED]","level":"error","message":"Error with PII","timestamp":"2023-10-01T10:09:00Z","user_id":109}
