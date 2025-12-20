@@ -62,3 +62,7 @@ path = "examples/11_config_driven_pipeline.rs"
 [[example]]
 name = "12_error_handling_variations"
 path = "examples/12_error_handling_variations.rs"
+
+[[example]]
+name = "99_failure_tour"
+path = "examples/99_failure_tour.rs"

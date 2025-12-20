@@ -31,6 +31,7 @@
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#examples">Examples</a> •
+  <a href="#invariants">Invariants</a> •
   <a href="#api-reference">API Reference</a> •
   <a href="#contributing">Contributing</a> •
   <a href="#license">License</a>
@@ -49,6 +50,31 @@ FeedMe is a high-performance, streaming data pipeline engine for Rust applicatio
 - **Fail-fast with attribution**: Errors include stage, code, and message; no silent failures.
 - **Observable without overhead**: Metrics collected automatically, exportable to Prometheus/JSON.
 - **Extensible with contracts**: Plugin system for custom stages without runtime discovery.
+
+## Why FeedMe is Not X
+
+FeedMe is intentionally **not** these things, and that's by design. Here's why:
+
+### Not Distributed (like Vector or Fluent Bit)
+FeedMe runs in a single process with no networking, coordination, or cluster management. This eliminates complexity from consensus, partitioning, and network failures. If you need distributed processing, FeedMe can be a building block within a larger system, but it doesn't handle distribution itself.
+
+### Not Stateful (like traditional ETL tools)
+Stages are pure functions: given the same input and configuration, they produce the same output. No persistent state, no side effects, no database connections. This makes pipelines predictable, testable, and easy to reason about—perfect for "data plumbing" where state management belongs at the edges.
+
+### Not Async-First (like many modern Rust libraries)
+Processing is synchronous by default. Async is an implementation detail for I/O-bound stages, not the core API. This keeps the mental model simple: a pipeline is a sequence of transformations, not a graph of futures. If you need high-concurrency async processing, FeedMe integrates cleanly but doesn't force it.
+
+### Not a DSL (like Logstash)
+No embedded languages, no configuration files, no YAML pipelines. Just Rust code. This means you get compile-time safety, IDE support, and the full power of Rust's type system. DSLs are great for non-programmers, but they hide complexity and limit expressiveness—FeedMe assumes you're writing code.
+
+### Not a Daemon (like filebeat)
+No long-running services, no background processes, no auto-restart. FeedMe is designed for batch processing and streaming pipelines that you control. It's a library you embed in your application, not a tool you deploy separately. This keeps deployment simple and resource usage predictable.
+
+This focus enables FeedMe's core guarantees while keeping the codebase small and maintainable.
+
+## Invariants
+
+FeedMe enforces **12 non-negotiable behavioral guarantees** that are tested mechanically. These invariants ensure reliability and prevent regressions. See [docs/invariants.md](docs/invariants.md) for the complete list.
 
 ## Features
 
@@ -163,6 +189,19 @@ cd feedme
 cargo build
 cargo test
 ```
+
+### Determinism Verification
+
+FeedMe guarantees deterministic output for identical inputs. Verify this with:
+
+```bash
+cargo run --example 09_complex_pipeline > run1.out
+cargo run --example 09_complex_pipeline > run2.out
+# On Unix: sha256sum run1.out run2.out
+# On Windows: certutil -hashfile run1.out SHA256 && certutil -hashfile run2.out SHA256
+```
+
+The hashes should match, proving deterministic behavior.
 
 ### Code of Conduct
 
