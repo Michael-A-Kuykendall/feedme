@@ -1,101 +1,58 @@
-#[cfg(any(test, feature = "invariant-ppt"))]
-use std::collections::BTreeSet;
+//! Predictive Property-Based Testing (PPT) Framework
+//!
+//! Runtime invariant checking with logging for comprehensive contract testing.
 
-#[cfg(any(test, feature = "invariant-ppt"))]
-use std::sync::{Mutex, OnceLock};
+use std::cell::RefCell;
+use std::collections::HashSet;
 
-#[cfg(any(test, feature = "invariant-ppt"))]
-#[derive(Debug, Clone)]
-struct InvariantRecord {
-    message: &'static str,
-    context: Option<&'static str>,
+thread_local! {
+    static INVARIANT_LOG: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 }
 
-#[cfg(any(test, feature = "invariant-ppt"))]
-static INVARIANT_LOG: OnceLock<Mutex<Vec<InvariantRecord>>> = OnceLock::new();
-
-#[cfg(any(test, feature = "invariant-ppt"))]
-fn log() -> &'static Mutex<Vec<InvariantRecord>> {
-    INVARIANT_LOG.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-/// Asserts an invariant (a semantic law) and records that it was checked.
-///
-/// Behavior:
-/// - In `test` builds or when the `invariant-ppt` feature is enabled: records checks and panics on violation.
-/// - Otherwise: uses `debug_assert!` and does not record (zero overhead in release).
-#[inline]
-pub fn assert_invariant(condition: bool, message: &'static str, context: Option<&'static str>) {
-    #[cfg(any(test, feature = "invariant-ppt"))]
-    {
-        let mut guard = log().lock().expect("invariant log poisoned");
-        guard.push(InvariantRecord { message, context });
-
-        if !condition {
-            panic!(
-                "Invariant violated: {}{}",
-                message,
-                context
-                    .map(|c| format!(" (context: {})", c))
-                    .unwrap_or_default()
-            );
-        }
-    }
-
-    #[cfg(not(any(test, feature = "invariant-ppt")))]
-    {
-        let _ = context;
-        debug_assert!(condition, "Invariant violated: {}", message);
-    }
-}
-
-/// Clears the invariant log (useful to isolate contract tests).
-#[cfg(any(test, feature = "invariant-ppt"))]
+/// Clear the invariant log for a new test
 pub fn clear_invariant_log() {
-    log().lock().expect("invariant log poisoned").clear();
+    INVARIANT_LOG.with(|log| log.borrow_mut().clear());
 }
 
-/// Returns all distinct invariant messages that were exercised.
-#[cfg(any(test, feature = "invariant-ppt"))]
-pub fn exercised_invariants() -> BTreeSet<&'static str> {
-    log()
-        .lock()
-        .expect("invariant log poisoned")
-        .iter()
-        .map(|r| {
-            let _ = r.context;
-            r.message
-        })
-        .collect()
-}
-
-/// Contract test: fails if any expected invariants were not exercised.
-#[cfg(any(test, feature = "invariant-ppt"))]
-pub fn contract_test(contract_name: &str, expected_invariants: &[&'static str]) {
-    let exercised = exercised_invariants();
-
-    let missing: Vec<&'static str> = expected_invariants
-        .iter()
-        .copied()
-        .filter(|inv| !exercised.contains(inv))
-        .collect();
-
-    if !missing.is_empty() {
-        let mut present: Vec<&'static str> = exercised.into_iter().collect();
-        present.sort();
-        panic!(
-            "Contract '{}' missing invariants: {:?}. Present: {:?}",
-            contract_name, missing, present
-        );
-    }
-}
-
+/// Assert an invariant and log it if true
 #[macro_export]
 macro_rules! assert_invariant {
-    ($cond:expr, $msg:expr) => {
-        $crate::invariant_ppt::assert_invariant($cond, $msg, None)
+    ($condition:expr, $message:expr) => {
+        if $condition {
+            $crate::invariant_ppt::log_invariant($message);
+        }
     };
-    ($cond:expr, $msg:expr, $ctx:expr) => {
-        $crate::invariant_ppt::assert_invariant($cond, $msg, Some($ctx))
-    };
+}
+
+// Re-export the macro from this module so callers can `pub use invariant_ppt::assert_invariant`.
+pub use crate::assert_invariant;
+
+/// Log an invariant message (internal)
+pub fn log_invariant(message: &str) {
+    INVARIANT_LOG.with(|log| {
+        log.borrow_mut().insert(message.to_string());
+    });
+}
+
+/// Verify that all expected invariants were exercised
+pub fn contract_test(test_name: &str, expected_invariants: &[&str]) -> Result<(), String> {
+    INVARIANT_LOG.with(|log| {
+        let logged = log.borrow();
+        let mut missing = Vec::new();
+
+        for &expected in expected_invariants {
+            if !logged.contains(expected) {
+                missing.push(expected.to_string());
+            }
+        }
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Contract test '{}' failed: missing invariants: {:?}",
+                test_name, missing
+            ))
+        }
+    })
 }

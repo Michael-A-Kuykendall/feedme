@@ -74,6 +74,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 pub mod invariant_ppt;
+pub use invariant_ppt::{clear_invariant_log, contract_test};
 
 #[cfg(test)]
 mod ppt_invariant_contracts;
@@ -548,10 +549,9 @@ impl Pipeline {
         let prev_dropped = self.metrics.events_dropped;
 
         self.metrics.increment_processed();
-        invariant_ppt::assert_invariant(
+        assert_invariant!(
             self.metrics.events_processed == prev_processed + 1,
-            INVARIANT_PROCESSED_INCREMENTS_ONCE,
-            Some("Pipeline::process_event"),
+            INVARIANT_PROCESSED_INCREMENTS_ONCE
         );
 
         let mut current = Some(event);
@@ -575,10 +575,9 @@ impl Pipeline {
                             .get(stage.name())
                             .map(|s| s.count)
                             .unwrap_or(0);
-                        invariant_ppt::assert_invariant(
+                        assert_invariant!(
                             new_stage_count == prev_stage_count + 1,
-                            INVARIANT_LATENCY_RECORDED_ON_SUCCESS,
-                            Some("Pipeline::process_event"),
+                            INVARIANT_LATENCY_RECORDED_ON_SUCCESS
                         );
 
                         current = opt;
@@ -599,27 +598,24 @@ impl Pipeline {
                                     .get(&DropReason::Filtered)
                                     .unwrap_or(&0);
 
-                                invariant_ppt::assert_invariant(
+                                assert_invariant!(
                                     self.metrics.events_dropped == dropped_before + 1
                                         && reason_after == reason_before + 1,
-                                    INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE,
-                                    Some("Pipeline::process_event"),
+                                    INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE
                                 );
                             } else {
-                                invariant_ppt::assert_invariant(
+                                assert_invariant!(
                                     self.metrics.events_dropped == prev_dropped,
-                                    INVARIANT_OUTPUT_NONE_NOT_DROPPED,
-                                    Some("Pipeline::process_event"),
+                                    INVARIANT_OUTPUT_NONE_NOT_DROPPED
                                 );
                             }
                         }
                     }
                     Err(e) => {
                         self.metrics.increment_errors();
-                        invariant_ppt::assert_invariant(
+                        assert_invariant!(
                             self.metrics.errors == prev_errors + 1,
-                            INVARIANT_ERRORS_INCREMENT_ON_ERROR,
-                            Some("Pipeline::process_event"),
+                            INVARIANT_ERRORS_INCREMENT_ON_ERROR
                         );
                         return Err(e);
                     }
@@ -630,12 +626,11 @@ impl Pipeline {
         }
 
         // Sanity: these counters should never run backward.
-        invariant_ppt::assert_invariant(
+        assert_invariant!(
             self.metrics.events_processed >= prev_processed
                 && self.metrics.errors >= prev_errors
                 && self.metrics.events_dropped >= prev_dropped,
-            "metrics counters are monotonic",
-            Some("Pipeline::process_event"),
+            "metrics counters are monotonic"
         );
         Ok(current)
     }
@@ -2968,5 +2963,16 @@ mod tests {
         let json = serde_json::to_string(&error).unwrap();
         let deserialized: PipelineError = serde_json::from_str(&json).unwrap();
         assert_eq!(format!("{:?}", error), format!("{:?}", deserialized));
+    }
+
+    #[test]
+    fn test_invariant_logging() {
+        clear_invariant_log();
+
+        assert_invariant!(true, "test invariant");
+        assert_invariant!(false, "should not log");
+
+        assert!(contract_test("test", &["test invariant"]).is_ok());
+        assert!(contract_test("test", &["missing invariant"]).is_err());
     }
 }

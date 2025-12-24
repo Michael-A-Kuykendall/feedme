@@ -51,13 +51,14 @@ fn contract_pipeline_metrics_laws_exercised() {
     let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).unwrap();
     let _ = pipeline.process_event(event).unwrap();
 
-    invariant_ppt::contract_test(
+    assert!(invariant_ppt::contract_test(
         "pipeline metrics laws",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
             crate::INVARIANT_LATENCY_RECORDED_ON_SUCCESS,
         ],
-    );
+    )
+    .is_ok());
 }
 
 #[test]
@@ -72,13 +73,14 @@ fn contract_drop_only_counts_for_non_output_stage() {
     let out = pipeline.process_event(event).unwrap();
     assert!(out.is_none());
 
-    invariant_ppt::contract_test(
+    assert!(invariant_ppt::contract_test(
         "drop counts",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
             crate::INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE,
         ],
-    );
+    )
+    .is_ok());
 
     // Output stage returning None must NOT count as dropped.
     invariant_ppt::clear_invariant_log();
@@ -91,13 +93,14 @@ fn contract_drop_only_counts_for_non_output_stage() {
     assert!(out.is_none());
 
     // This invariant is checked in the core logic, and this contract ensures the check executes.
-    invariant_ppt::contract_test(
+    assert!(invariant_ppt::contract_test(
         "output consumption",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
             crate::INVARIANT_OUTPUT_NONE_NOT_DROPPED,
         ],
-    );
+    )
+    .is_ok());
 }
 
 #[test]
