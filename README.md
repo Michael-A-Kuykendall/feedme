@@ -16,9 +16,9 @@
     <img src="https://docs.rs/feedme/badge.svg" alt="Docs.rs">
   </a>
   <a href="https://github.com/Michael-A-Kuykendall/feedme/actions/workflows/test-and-coverage.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/Michael-A-Kuykendall/feedme/test-and-coverage.yml?branch=master&label=CI" alt="CI">
+    <img src="https://img.shields.io/github/actions/workflow/status/Michael-A-Kuykendall/feedme/test-and-coverage.yml?branch=main&label=CI" alt="CI">
   </a>
-  <a href="https://github.com/Michael-A-Kuykendall/feedme/blob/master/LICENSE">
+  <a href="https://github.com/Michael-A-Kuykendall/feedme/blob/main/LICENSE-MIT">
     <img src="https://img.shields.io/github/license/Michael-A-Kuykendall/feedme" alt="License">
   </a>
 </p>
