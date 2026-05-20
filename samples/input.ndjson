@@ -1,0 +1,3 @@
+{"timestamp":"2023-10-01T10:00:00Z","level":"info","message":"User logged in","email":"user@example.com"}
+{"level":"debug","message":"Debug info"}
+{"message":"Missing level"}

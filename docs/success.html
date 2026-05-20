@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Success - FeedMe Pro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .success-container {
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 60px;
+            border-radius: 12px;
+            max-width: 600px;
+            margin: 20px;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .license-info {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .license-info h3 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+
+        .license-info p {
+            margin-bottom: 10px;
+            font-family: monospace;
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+
+        .next-steps {
+            text-align: left;
+            margin-top: 30px;
+        }
+
+        .next-steps h3 {
+            margin-bottom: 15px;
+            color: #81C784;
+        }
+
+        .next-steps ol {
+            padding-left: 20px;
+        }
+
+        .next-steps li {
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px;
+            transition: background 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #45a049;
+        }
+
+        .btn.secondary {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .btn.secondary:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">🎉</div>
+        <h1>Welcome to FeedMe Pro!</h1>
+        <p>Your subscription has been activated successfully. You're now ready to eliminate pipeline debugging nightmares.</p>
+
+        <div class="license-info">
+            <h3>📋 Your License Information</h3>
+            <p><strong>License Key:</strong> <span id="license-key">Loading...</span></p>
+            <p><strong>Expires:</strong> <span id="expiry-date">Loading...</span></p>
+            <p><strong>Max Machines:</strong> <span id="max-machines">Loading...</span></p>
+        </div>
+
+        <div class="next-steps">
+            <h3>🚀 Next Steps</h3>
+            <ol>
+                <li>Check your email for complete setup instructions</li>
+                <li>Download the FeedMe Pro SDK from our developer portal</li>
+                <li>Integrate license validation into your pipeline code</li>
+                <li>Enable Pro features like fault injection and performance regression tracking</li>
+                <li>Join our Slack community for support and best practices</li>
+            </ol>
+        </div>
+
+        <div>
+            <a href="https://docs.feedme.dev/pro" class="btn">View Documentation</a>
+            <a href="https://github.com/Michael-A-Kuykendall/feedme" class="btn secondary">GitHub Repository</a>
+        </div>
+    </div>
+
+    <script>
+        // Extract license info from URL parameters (passed from Stripe webhook)
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // These would be populated by your webhook handler
+        document.getElementById('license-key').textContent = urlParams.get('license_key') || 'F5E80F-F3AA8E-B44D18-1C52ED-6729E9-V3';
+        document.getElementById('expiry-date').textContent = urlParams.get('expiry') || 'December 24, 2026';
+        document.getElementById('max-machines').textContent = urlParams.get('max_machines') || '50';
+
+        // Track conversion event
+        if (window.gtag) {
+            gtag('event', 'purchase', {
+                transaction_id: urlParams.get('session_id'),
+                value: urlParams.get('amount'),
+                currency: 'USD',
+                items: [{
+                    item_name: `FeedMe Pro ${urlParams.get('tier') || 'Team'}`,
+                    price: urlParams.get('amount')
+                }]
+            });
+        }
+    </script>
+</body>
+</html>

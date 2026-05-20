@@ -1,0 +1,16 @@
+{"email":"[REDACTED]","level":"info","message":"User logged in","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:00:00Z","user":123}
+{"level":"warn","message":"High CPU usage","processed_at":"2025-12-20T00:00:00Z","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:02:00Z","user":789}
+{"level":"info","message":"Another event","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:05:00Z","user":104}
+{"level":"warn","message":"Warning event","processed_at":"2025-12-20T00:00:00Z","ssn":"[REDACTED]","timestamp":"2023-10-01T10:06:00Z","user":105}
+{"level":"info","message":"Valid event","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:07:00Z","user":107}
+{"level":"info","message":"Another valid","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:08:00Z","user":108}
+{"email":"[REDACTED]","level":"error","message":"Error with PII","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:09:00Z","user":109}
+{"email":"[REDACTED]","level":"info","message":"User logged in","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:00:00Z","user":123}
+{"level":"warn","message":"High CPU usage","processed_at":"2025-12-20T00:00:00Z","ssn":"[REDACTED]","timestamp":"2023-10-01T10:01:00Z","user":456}
+{"email":"[REDACTED]","level":"error","message":"Database connection failed","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:02:00Z","user":789}
+{"level":"info","message":"Another event","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:05:00Z","user":104}
+{"level":"warn","message":"Warning event","processed_at":"2025-12-20T00:00:00Z","ssn":"[REDACTED]","timestamp":"2023-10-01T10:06:00Z","user":105}
+{"level":"info","message":"Valid event","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:07:00Z","user":107}
+{"level":"info","message":"Another valid","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:08:00Z","user":108}
+{"email":"[REDACTED]","level":"error","message":"Error with PII","processed_at":"2025-12-20T00:00:00Z","timestamp":"2023-10-01T10:09:00Z","user":109}

@@ -1,0 +1,23 @@
+{
+    // FeedMe Development Repository Configuration
+    // IMPORTANT: This workspace is configured for PRIVATE repository development only
+    // See .devdocs.md for complete repository workflow policy
+    // NEVER push to public repository (origin) - use private remote only
+
+    "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#2A9D8F",
+        "titleBar.inactiveBackground": "#1B8E80",
+        "titleBar.activeForeground": "#FFFFFF",
+        "titleBar.inactiveForeground": "#EEEEEE",
+        "activityBar.background": "#2A9D8F",
+        "activityBar.foreground": "#FFFFFF",
+        "statusBar.background": "#006F61",
+        "statusBar.foreground": "#FFFFFF"
+    },
+    "window.title": "${rootName}",
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "terminal.integrated.accessibilitySupport": "off",
+    "terminal.integrated.confirmOnPaste": false,
+    "terminal.integrated.confirmOnExit": false,
+    "terminal.integrated.allowChords": false
+}
