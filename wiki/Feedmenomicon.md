@@ -58,7 +58,7 @@ Built-in stages:
 | `StdoutOutput` | Write events to stdout as NDJSON |
 | `FileOutput` | Write events to a file as NDJSON |
 | `Deadletter` | Route rejected events to a deadletter sink |
-| `HttpPost` | Post events to an HTTP endpoint |
+| `HttpPost` | (planned / user Stage) Post events to an HTTP endpoint — implement via custom Stage for now |
 
 ---
 

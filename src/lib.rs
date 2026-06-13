@@ -183,14 +183,17 @@ pub mod replay_spec {
     }
 
     impl PipelineReplaySpec {
-        /// Create a spec from a pipeline (requires all stages to be replayable)
-        pub fn from_pipeline(_pipeline: &Pipeline, _registry: &StageRegistry) -> Result<Self, PipelineError> {
-            // For now, this is a placeholder - we need a better way to get specs from stages
-            Err(PipelineError::System(SystemError {
-                stage: "ReplaySpec".to_string(),
-                code: SystemErrorCode::InvalidConfig,
-                message: "Pipeline serialization not yet implemented - requires stage trait integration".to_string(),
-            }))
+        /// Create a spec from a pipeline (requires all stages to support to_replay_spec via ReplayableStage).
+        pub fn from_pipeline(pipeline: &Pipeline, _registry: &StageRegistry) -> Result<Self, PipelineError> {
+            let stage_specs = pipeline.extract_replay_specs();
+            if stage_specs.len() != pipeline.stages.len() {
+                return Err(PipelineError::System(SystemError {
+                    stage: "ReplaySpec".to_string(),
+                    code: SystemErrorCode::InvalidConfig,
+                    message: "Pipeline serialization not possible: not all stages implement ReplayableStage (to_replay_spec)".to_string(),
+                }));
+            }
+            Self::from_stages(stage_specs)
         }
 
         /// Create a spec from stages directly (for testing)
@@ -360,6 +363,16 @@ impl Event {
     /// Typed field access for numbers.
     pub fn get_number(&self, key: &str) -> Option<f64> {
         self.data.get(key)?.as_f64()
+    }
+
+    /// Builder helper to attach/override metadata (for traces, audit ids, routing).
+    /// Promoted as first-class extension point for the "bells and whistles" (audit/replay).
+    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        if self.metadata.is_none() {
+            self.metadata = Some(BTreeMap::new());
+        }
+        self.metadata.as_mut().unwrap().insert(key.into(), value);
+        self
     }
 
     // Add more typed access as needed.
@@ -786,6 +799,11 @@ pub trait Stage {
     fn is_output(&self) -> bool {
         false
     }
+    /// Optional support for structural replay specs.
+    /// Returning Some allows the stage to participate in PipelineReplaySpec roundtrips.
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        None
+    }
 }
 
 /// Pipeline: linear, deterministic execution of stages.
@@ -921,6 +939,15 @@ impl Pipeline {
     /// Returns the name of each stage in pipeline order.
     pub fn stage_names(&self) -> Vec<&str> {
         self.stages.iter().map(|s| s.name()).collect()
+    }
+
+    /// Internal: extract replay specs from stages that support ReplayableStage.
+    /// Used by replay_spec::PipelineReplaySpec::from_pipeline.
+    pub(crate) fn extract_replay_specs(&self) -> Vec<replay_spec::StageSpec> {
+        self.stages
+            .iter()
+            .filter_map(|s| s.to_replay_spec())
+            .collect()
     }
 
     /// Returns the total number of events processed.
@@ -1270,6 +1297,10 @@ impl Stage for FieldSelect {
     fn name(&self) -> &str {
         "FieldSelect"
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Transform for FieldSelect {}
@@ -1323,6 +1354,26 @@ impl Stage for FieldRemap {
 
 impl Transform for FieldRemap {}
 
+impl replay_spec::ReplayableStage for FieldRemap {
+    fn stage_id() -> replay_spec::StageId {
+        "field_remap".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "mappings": self.mappings
+            }),
+        }
+    }
+}
+
 pub struct PIIRedaction {
     patterns: Vec<Regex>,
 }
@@ -1353,6 +1404,31 @@ impl Stage for PIIRedaction {
 }
 
 impl Transform for PIIRedaction {}
+
+impl replay_spec::ReplayableStage for PIIRedaction {
+    fn stage_id() -> replay_spec::StageId {
+        "pii_redaction".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        let patterns: Vec<String> = self
+            .patterns
+            .iter()
+            .map(|r| r.as_str().to_string())
+            .collect();
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "patterns": patterns
+            }),
+        }
+    }
+}
 
 pub struct DerivedFields {
     derivations: HashMap<String, EventDerivationFn>,
@@ -1385,6 +1461,26 @@ impl Stage for DerivedFields {
 
 impl Transform for DerivedFields {}
 
+impl replay_spec::ReplayableStage for DerivedFields {
+    fn stage_id() -> replay_spec::StageId {
+        "derived_fields".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "derivations": "user-provided-closures"
+            }),
+        }
+    }
+}
+
 pub struct Filter {
     condition: Box<dyn Fn(&Event) -> bool>,
 }
@@ -1410,6 +1506,26 @@ impl Stage for Filter {
 }
 
 impl Transform for Filter {}
+
+impl replay_spec::ReplayableStage for Filter {
+    fn stage_id() -> replay_spec::StageId {
+        "filter".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "predicate": "user-provided-closure"
+            }),
+        }
+    }
+}
 
 /// Validators: enforce structural and semantic correctness of events before output.
 /// Schema enforced, fail closed, no silent acceptance.
@@ -1443,6 +1559,10 @@ impl Stage for RequiredFields {
 
     fn name(&self) -> &str {
         "RequiredFields"
+    }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
     }
 }
 
@@ -1514,6 +1634,26 @@ impl Stage for TypeChecking {
 
 impl Validator for TypeChecking {}
 
+impl replay_spec::ReplayableStage for TypeChecking {
+    fn stage_id() -> replay_spec::StageId {
+        "type_checking".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "type_checks": self.type_checks
+            }),
+        }
+    }
+}
+
 pub struct ValueConstraints {
     constraints: HashMap<String, ValueConstraintFn>,
 }
@@ -1549,6 +1689,26 @@ impl Stage for ValueConstraints {
 
 impl Validator for ValueConstraints {}
 
+impl replay_spec::ReplayableStage for ValueConstraints {
+    fn stage_id() -> replay_spec::StageId {
+        "value_constraints".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "constraints": "user-provided-closures"
+            }),
+        }
+    }
+}
+
 /// Outputs: emit processed events to local or synchronous destinations with explicit failure semantics.
 /// Ordered write, bounded retry, no unbounded retry, no background flush.
 pub trait Output: Stage {}
@@ -1581,9 +1741,31 @@ impl Stage for StdoutOutput {
     fn is_output(&self) -> bool {
         true
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Output for StdoutOutput {}
+
+impl replay_spec::ReplayableStage for StdoutOutput {
+    fn stage_id() -> replay_spec::StageId {
+        "stdout_output".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({}),
+        }
+    }
+}
 
 impl Default for StdoutOutput {
     fn default() -> Self {
@@ -1593,30 +1775,37 @@ impl Default for StdoutOutput {
 
 pub struct FileOutput {
     path: PathBuf,
+    // Handle kept open for efficiency (one open per stage lifetime, not per event).
+    // Use BufWriter for better throughput; flushes on drop. For strict no-buffer semantics
+    // prefer custom output stage or StdoutOutput. This is a backstop improvement within
+    // the "no hidden buffering in the *processing* pipeline" rule.
+    file: Option<std::io::BufWriter<std::fs::File>>,
 }
 
 impl FileOutput {
     pub fn new(path: PathBuf) -> Self {
-        FileOutput { path }
+        FileOutput { path, file: None }
     }
 }
 
 impl Stage for FileOutput {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
-        use std::io::Write;
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&self.path)
-            .map_err(|e| {
-                PipelineError::Output(OutputError {
+        use std::io::{BufWriter, Write};
+        if self.file.is_none() {
+            let f = fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(&self.path)
+                .map_err(|e| PipelineError::Output(OutputError {
                     stage: "File".to_string(),
                     code: OutputErrorCode::IoError,
                     message: e.to_string(),
-                })
-            })?;
+                }))?;
+            self.file = Some(BufWriter::new(f));
+        }
+        let writer = self.file.as_mut().unwrap();
         writeln!(
-            file,
+            writer,
             "{}",
             serde_json::to_string(&event.data).map_err(|e| PipelineError::Output(OutputError {
                 stage: "File".to_string(),
@@ -1624,13 +1813,16 @@ impl Stage for FileOutput {
                 message: e.to_string(),
             }))?
         )
-        .map_err(|e| {
-            PipelineError::Output(OutputError {
-                stage: "File".to_string(),
-                code: OutputErrorCode::IoError,
-                message: e.to_string(),
-            })
-        })?;
+        .map_err(|e| PipelineError::Output(OutputError {
+            stage: "File".to_string(),
+            code: OutputErrorCode::IoError,
+            message: e.to_string(),
+        }))?;
+        writer.flush().map_err(|e| PipelineError::Output(OutputError {
+            stage: "File".to_string(),
+            code: OutputErrorCode::IoError,
+            message: e.to_string(),
+        }))?;
         Ok(None) // Consumed
     }
 
@@ -1645,32 +1837,55 @@ impl Stage for FileOutput {
 
 impl Output for FileOutput {}
 
+impl replay_spec::ReplayableStage for FileOutput {
+    fn stage_id() -> replay_spec::StageId {
+        "file_output".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "path": self.path
+            }),
+        }
+    }
+}
+
 pub struct Deadletter {
     path: PathBuf,
+    file: Option<std::io::BufWriter<std::fs::File>>,
 }
 
 impl Deadletter {
     pub fn new(path: PathBuf) -> Self {
-        Deadletter { path }
+        Deadletter { path, file: None }
     }
 }
 
 impl Stage for Deadletter {
     fn execute(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
-        use std::io::Write;
-        let mut file = fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&self.path)
-            .map_err(|e| {
-                PipelineError::Output(OutputError {
+        use std::io::{BufWriter, Write};
+        if self.file.is_none() {
+            let f = fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(&self.path)
+                .map_err(|e| PipelineError::Output(OutputError {
                     stage: "Deadletter".to_string(),
                     code: OutputErrorCode::IoError,
                     message: e.to_string(),
-                })
-            })?;
+                }))?;
+            self.file = Some(BufWriter::new(f));
+        }
+        let writer = self.file.as_mut().unwrap();
         writeln!(
-            file,
+            writer,
             "{}",
             serde_json::to_string(&event).map_err(|e| PipelineError::Output(OutputError {
                 stage: "Deadletter".to_string(),
@@ -1678,13 +1893,16 @@ impl Stage for Deadletter {
                 message: e.to_string(),
             }))?
         )
-        .map_err(|e| {
-            PipelineError::Output(OutputError {
-                stage: "Deadletter".to_string(),
-                code: OutputErrorCode::IoError,
-                message: e.to_string(),
-            })
-        })?;
+        .map_err(|e| PipelineError::Output(OutputError {
+            stage: "Deadletter".to_string(),
+            code: OutputErrorCode::IoError,
+            message: e.to_string(),
+        }))?;
+        writer.flush().map_err(|e| PipelineError::Output(OutputError {
+            stage: "Deadletter".to_string(),
+            code: OutputErrorCode::IoError,
+            message: e.to_string(),
+        }))?;
         Ok(None) // Consumed
     }
 
@@ -1699,13 +1917,37 @@ impl Stage for Deadletter {
 
 impl Output for Deadletter {}
 
+impl replay_spec::ReplayableStage for Deadletter {
+    fn stage_id() -> replay_spec::StageId {
+        "deadletter".to_string()
+    }
+
+    fn stage_version() -> replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> replay_spec::StageSpec {
+        replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "path": self.path
+            }),
+        }
+    }
+}
+
 /// Configuration: ensure pipeline behavior is fully declared and validated before execution.
 /// YAML input, version required, schema validated, unknown field rejection, no runtime mutation.
+/// Supports optional "stages" list using replay_spec style for built-in stages (ties to unified replay).
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     version: u32,
-    // For now, minimal; can extend to full pipeline definition
+    /// Optional list of stage specs for config-driven pipeline construction.
+    /// Each item: { "stage_id": "field_select", "config": { "fields": ["level"] } }
+    /// Use with a StageRegistry that has factories registered for the ids.
+    stages: Option<Vec<replay_spec::StageSpec>>,
 }
 
 impl Config {
@@ -1715,6 +1957,26 @@ impl Config {
             return Err(anyhow::anyhow!("Unsupported version: {}", config.version));
         }
         Ok(config)
+    }
+
+    /// Build a Pipeline from the config's stages list using the given registry.
+    /// Ties directly into the unified replay_spec machinery for "bells and whistles" config-driven use.
+    pub fn build_pipeline(&self, registry: &replay_spec::StageRegistry) -> Result<Pipeline, PipelineError> {
+        if self.version != 1 {
+            return Err(PipelineError::System(SystemError {
+                stage: "Config".to_string(),
+                code: SystemErrorCode::InvalidConfig,
+                message: "version must be 1".to_string(),
+            }));
+        }
+        let mut pipeline = Pipeline::new();
+        if let Some(stages) = &self.stages {
+            for spec in stages {
+                let stage = registry.create_stage(spec)?;
+                pipeline.add_stage(stage);
+            }
+        }
+        Ok(pipeline)
     }
 }
 

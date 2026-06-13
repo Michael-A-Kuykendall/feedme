@@ -6,7 +6,7 @@
 /// ReplayManager serialises pipeline specs and diffs them structurally.
 /// Plug this into your deployment pipeline to catch accidental changes
 /// before they reach production.
-use feedme::replay::ReplayManager;
+use feedme::replay_spec::{PipelineReplaySpec, StageRegistry};
 use feedme::*;
 use serde_json::json;
 
@@ -43,39 +43,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline_v1 = build_v1();
     let pipeline_v2 = build_v2();
 
-    let mut manager = ReplayManager::new();
+    // Use the unified advanced replay_spec (replay.rs structural path is now thin/legacy; prefer this for full config capture)
+    let mut registry = StageRegistry::new();
+    // Register built-in factories for roundtrip (in real use, register your stages)
+    registry.register_stage("required_fields".to_string(), Box::new(|config| {
+        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+        Ok(Box::new(RequiredFields::new(fields)))
+    }));
+    registry.register_stage("filter".to_string(), Box::new(|_config| {
+        // For demo; real closure predicates would be reconstructed by user code
+        Ok(Box::new(Filter::new(Box::new(|ev| ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")))))
+    }));
+    registry.register_stage("stdout_output".to_string(), Box::new(|_config| Ok(Box::new(StdoutOutput::new()))));
+    registry.register_stage("pii_redaction".to_string(), Box::new(|config| {
+        let patterns: Vec<String> = serde_json::from_value(config["patterns"].clone())?;
+        let regexes = patterns.into_iter().map(|p| regex::Regex::new(&p).unwrap()).collect();
+        Ok(Box::new(PIIRedaction::new(regexes)))
+    }));
+    registry.register_stage("field_select".to_string(), Box::new(|config| {
+        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+        Ok(Box::new(FieldSelect::new(fields)))
+    }));
 
-    // ── Serialise both pipeline versions ───────────────────────────────────
-    let spec_v1 = manager.serialize_pipeline(&pipeline_v1, "v1");
-    let spec_v2 = manager.serialize_pipeline(&pipeline_v2, "v2");
+    let spec_v1 = PipelineReplaySpec::from_pipeline(&pipeline_v1, &registry)?;
+    let spec_v2 = PipelineReplaySpec::from_pipeline(&pipeline_v2, &registry)?;
 
-    manager.record_spec("v1", spec_v1);
-    manager.record_spec("v2", spec_v2);
+    // ── Compare using diff on specs ────────────────────────────────────────
+    let diff = spec_v1.diff(&spec_v2);
 
-    // ── Compare ────────────────────────────────────────────────────────────
-    let report = manager.generate_replay_report("v1", "v2")?;
+    println!("=== Pipeline Diff (unified replay_spec) ===");
+    println!("v1 stages: {}", spec_v1.stages.len());
+    println!("v2 stages: {}", spec_v2.stages.len());
 
-    println!("=== Pipeline Diff: {} → {} ===", report.baseline_name, report.current_name);
-    println!("v1 stages: {}", report.baseline_spec.stages.len());
-    println!("v2 stages: {}", report.current_spec.stages.len());
-
-    let diff = &report.comparison.diff;
-    if report.comparison.added_stages == 0
-        && report.comparison.removed_stages == 0
-        && report.comparison.modified_stages == 0
-        && !report.comparison.settings_changed
+    if diff.added_stages.is_empty()
+        && diff.removed_stages.is_empty()
+        && diff.modified_stages.is_empty()
+        && !diff.settings_changed
     {
         println!("No changes detected — pipelines are structurally identical.");
     } else {
         println!("\nChanges detected:");
-        for name in &diff.added_stages {
-            println!("  + added stage: {}", name);
+        for s in &diff.added_stages {
+            println!("  + added stage: {} (id={})", s.stage_id, s.stage_id);
         }
-        for name in &diff.removed_stages {
-            println!("  - removed stage: {}", name);
+        for s in &diff.removed_stages {
+            println!("  - removed stage: {} (id={})", s.stage_id, s.stage_id);
         }
-        for name in &diff.modified_stages {
-            println!("  ~ modified stage: {}", name);
+        for (i, a, b) in &diff.modified_stages {
+            println!("  ~ modified stage at {}: {} -> {}", i, a.stage_id, b.stage_id);
         }
         if diff.settings_changed {
             println!("  ~ pipeline-level settings changed");
