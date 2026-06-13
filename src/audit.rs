@@ -117,7 +117,10 @@ impl AuditManager {
         self.audit_trail.push(AuditEvent {
             event_type: AuditEventType::AttestationGenerated,
             timestamp: std::time::SystemTime::now(),
-            details: format!("Generated attestation bundle for execution {}", execution_id),
+            details: format!(
+                "Generated attestation bundle for execution {}",
+                execution_id
+            ),
             user_id: None,
             compliance_impact: ComplianceImpact::High,
         });
@@ -240,7 +243,7 @@ impl Default for AuditManager {
     }
 }
 
-// ── Domain types ──────────────────────────────────────────────────────────────
+// Domain types
 
 /// Comprehensive attestation bundle for a pipeline execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -390,7 +393,7 @@ pub struct RegulatoryEvidence {
     pub evidence_items: Vec<String>,
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
+// Private helpers
 
 struct EvidenceBundle {
     attestation: AttestationBundle,
@@ -405,7 +408,7 @@ fn compute_pipeline_hash(pipeline: &crate::Pipeline) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// Tests
 
 #[cfg(test)]
 mod tests {
@@ -422,7 +425,9 @@ mod tests {
     fn test_attestation_generation() {
         let mut manager = AuditManager::new();
         let pipeline = crate::Pipeline::new();
-        let bundle = manager.generate_attestation_bundle(&pipeline, "test-exec").unwrap();
+        let bundle = manager
+            .generate_attestation_bundle(&pipeline, "test-exec")
+            .unwrap();
         assert_eq!(bundle.execution_id, "test-exec");
         assert_eq!(bundle.attested_by, "FeedMe Audit Manager");
     }

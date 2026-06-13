@@ -13,9 +13,10 @@ use serde_json::json;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Build pipeline ──────────────────────────────────────────────────────
     let mut pipeline = Pipeline::new();
-    pipeline.add_stage(Box::new(PIIRedaction::new(vec![
-        regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap(),
-    ])));
+    pipeline.add_stage(Box::new(PIIRedaction::new(vec![regex::Regex::new(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+    )
+    .unwrap()])));
     pipeline.add_stage(Box::new(RequiredFields::new(vec![
         "event_type".into(),
         "timestamp".into(),
@@ -31,7 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for data in &events {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         let _ = pipeline.process_event(ev);
     }
 
@@ -74,7 +78,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let report = auditor.generate_compliance_report();
     println!(
         "\nCompliance report: {}/{} checks passed",
-        report.passed_checks, report.total_policies * report.passed_checks.max(1)
+        report.passed_checks,
+        report.total_policies * report.passed_checks.max(1)
     );
 
     // Harden user-surface: assert attestation and compliance

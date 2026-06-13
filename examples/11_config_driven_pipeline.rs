@@ -1,5 +1,5 @@
-use feedme::*;
 use feedme::replay_spec::StageRegistry;
+use feedme::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example: Config-driven pipeline (now functional via unified replay_spec + registry)
@@ -19,11 +19,17 @@ stages:
     println!("Config loaded successfully.");
 
     let mut registry = StageRegistry::new();
-    registry.register_stage("field_select".to_string(), Box::new(|c| {
-        let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
-        Ok(Box::new(FieldSelect::new(fields)))
-    }));
-    registry.register_stage("stdout_output".to_string(), Box::new(|_c| Ok(Box::new(StdoutOutput::new()))));
+    registry.register_stage(
+        "field_select".to_string(),
+        Box::new(|c| {
+            let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
+            Ok(Box::new(FieldSelect::new(fields)))
+        }),
+    );
+    registry.register_stage(
+        "stdout_output".to_string(),
+        Box::new(|_c| Ok(Box::new(StdoutOutput::new()))),
+    );
 
     let mut pipeline = config.build_pipeline(&registry)?;
 

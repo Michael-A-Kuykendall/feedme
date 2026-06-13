@@ -11,7 +11,10 @@ use serde_json::json;
 
 fn make_pipeline() -> Pipeline {
     let mut p = Pipeline::new();
-    p.add_stage(Box::new(RequiredFields::new(vec!["level".into(), "message".into()])));
+    p.add_stage(Box::new(RequiredFields::new(vec![
+        "level".into(),
+        "message".into(),
+    ])));
     p.add_stage(Box::new(Filter::new(Box::new(|ev| {
         ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")
     }))));
@@ -33,17 +36,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Establish baseline after an initial warm-up pass ───────────────────
     for data in &events {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         let _ = pipeline.process_event(ev);
     }
 
     let mut ppt = PptManager::new().with_regression_threshold(0.20); // 20% allowed
     ppt.establish_baseline(&pipeline);
-    println!("Baseline captured — {} events processed", pipeline.events_processed());
+    println!(
+        "Baseline captured — {} events processed",
+        pipeline.events_processed()
+    );
 
     // ── Run more data (same pipeline, same conditions) ──────────────────────
     for data in events.iter().cycle().take(50) {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         let _ = pipeline.process_event(ev);
     }
 
@@ -65,6 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    // Harden user-surface: explicit asserts
+    assert!(!report.has_regression);
+    assert!(pipeline.events_processed() > events.len() as u64);
     println!("Total processed: {}", pipeline.events_processed());
     Ok(())
 }

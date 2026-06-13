@@ -1,36 +1,14 @@
-//! Fault Injection — controlled resilience testing for pipelines.
+//! Fault injection for resilience testing.
 //!
-//! Wrap any `Stage` in a `FaultAwareStage` at pipeline construction time.
-//! Retain the shared `FaultHandle` to activate / clear faults later — from
-//! any thread — without touching the pipeline.
-//!
-//! # Example
-//!
-//! ```rust
-//! use feedme::{Pipeline, Event};
-//! use feedme::fault_injection::{FaultInjector, FaultType};
-//!
-//! # struct MyStage;
-//! # impl feedme::Stage for MyStage {
-//! #     fn execute(&mut self, e: Event) -> Result<Option<Event>, feedme::PipelineError> { Ok(Some(e)) }
-//! #     fn name(&self) -> &str { "my_stage" }
-//! # }
-//! let mut injector = FaultInjector::new();
-//! let mut pipeline = Pipeline::new();
-//!
-//! let wrapped = injector.wrap_and_register("payment", Box::new(MyStage));
-//! pipeline.add_stage(Box::new(wrapped.stage));
-//!
-//! // Activate a failure for the next 3 events
-//! injector.activate_failure("payment", "simulated timeout", Some(3));
-//! ```
+//! Wrap stages with `FaultAwareStage` to inject failures, timeouts, etc. during tests.
+//! Use `FaultInjector` to control faults after pipeline construction.
 
 use crate::{Event, PipelineError, Stage, ValidationError, ValidationErrorCode};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-// ── Shared fault state ────────────────────────────────────────────────────────
+// Shared fault state
 
 #[derive(Debug, Clone)]
 pub struct FaultState {
@@ -47,7 +25,10 @@ struct ActiveFaultConfig {
 
 impl FaultState {
     fn new() -> Self {
-        Self { active: None, total_triggers: 0 }
+        Self {
+            active: None,
+            total_triggers: 0,
+        }
     }
 
     fn is_active(&self) -> bool {
@@ -86,7 +67,11 @@ impl FaultAwareStage {
     pub fn wrap(stage: Box<dyn Stage>) -> (Self, Arc<Mutex<FaultState>>) {
         let state = Arc::new(Mutex::new(FaultState::new()));
         let name = stage.name().to_string();
-        let wrapped = Self { inner: stage, state: Arc::clone(&state), stage_name: name };
+        let wrapped = Self {
+            inner: stage,
+            state: Arc::clone(&state),
+            stage_name: name,
+        };
         (wrapped, state)
     }
 }
@@ -142,7 +127,7 @@ pub struct WrappedStage {
     pub stage: FaultAwareStage,
 }
 
-// ── FaultInjector ─────────────────────────────────────────────────────────────
+// FaultInjector
 
 /// Manages shared fault handles for multiple wrapped stages.
 #[derive(Default)]
@@ -182,7 +167,10 @@ impl FaultInjector {
     ) -> Result<FaultId, String> {
         self.activate(
             stage_name,
-            FaultType::StageFailure { stage_index: 0, error_message: error_message.into() },
+            FaultType::StageFailure {
+                stage_index: 0,
+                error_message: error_message.into(),
+            },
             count,
         )
     }
@@ -196,7 +184,10 @@ impl FaultInjector {
     ) -> Result<FaultId, String> {
         self.activate(
             stage_name,
-            FaultType::StageTimeout { stage_index: 0, timeout_ms },
+            FaultType::StageTimeout {
+                stage_index: 0,
+                timeout_ms,
+            },
             count,
         )
     }
@@ -210,7 +201,9 @@ impl FaultInjector {
     ) -> Result<FaultId, String> {
         self.activate(
             stage_name,
-            FaultType::ResourceExhaustion { resource_type: resource_type.into() },
+            FaultType::ResourceExhaustion {
+                resource_type: resource_type.into(),
+            },
             count,
         )
     }
@@ -223,7 +216,9 @@ impl FaultInjector {
     ) -> Result<FaultId, String> {
         self.activate(
             stage_name,
-            FaultType::NetworkPartition { affected_stages: vec![0] },
+            FaultType::NetworkPartition {
+                affected_stages: vec![0],
+            },
             count,
         )
     }
@@ -272,11 +267,16 @@ impl FaultInjector {
         count: Option<u32>,
     ) -> Result<FaultId, String> {
         let state = self.handles.get(stage_name).ok_or_else(|| {
-            format!("No stage registered as '{}'. Call wrap_and_register() first.", stage_name)
+            format!(
+                "No stage registered as '{}'. Call wrap_and_register() first.",
+                stage_name
+            )
         })?;
 
-        state.lock().expect("lock poisoned").active =
-            Some(ActiveFaultConfig { fault_type: fault_type.clone(), remaining: count });
+        state.lock().expect("lock poisoned").active = Some(ActiveFaultConfig {
+            fault_type: fault_type.clone(),
+            remaining: count,
+        });
 
         let fault_id = FaultId::new();
         self.history.push(FaultRecord {
@@ -290,7 +290,7 @@ impl FaultInjector {
     }
 }
 
-// ── Domain types ──────────────────────────────────────────────────────────────
+// Domain types
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FaultId(String);
@@ -307,10 +307,20 @@ impl FaultId {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FaultType {
-    StageTimeout { stage_index: usize, timeout_ms: u64 },
-    StageFailure { stage_index: usize, error_message: String },
-    ResourceExhaustion { resource_type: String },
-    NetworkPartition { affected_stages: Vec<usize> },
+    StageTimeout {
+        stage_index: usize,
+        timeout_ms: u64,
+    },
+    StageFailure {
+        stage_index: usize,
+        error_message: String,
+    },
+    ResourceExhaustion {
+        resource_type: String,
+    },
+    NetworkPartition {
+        affected_stages: Vec<usize>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -330,7 +340,7 @@ pub struct FaultInjectionReport {
     pub recent_faults: Vec<FaultRecord>,
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// Tests
 
 #[cfg(test)]
 mod tests {
@@ -339,12 +349,19 @@ mod tests {
 
     struct Passthrough;
     impl Stage for Passthrough {
-        fn execute(&mut self, e: Event) -> Result<Option<Event>, PipelineError> { Ok(Some(e)) }
-        fn name(&self) -> &str { "passthrough" }
+        fn execute(&mut self, e: Event) -> Result<Option<Event>, PipelineError> {
+            Ok(Some(e))
+        }
+        fn name(&self) -> &str {
+            "passthrough"
+        }
     }
 
     fn evt() -> Event {
-        Event { data: serde_json::json!({"x": 1}), metadata: None }
+        Event {
+            data: serde_json::json!({"x": 1}),
+            metadata: None,
+        }
     }
 
     #[test]
@@ -374,7 +391,10 @@ mod tests {
     fn test_failure_fault_fires_then_auto_clears() {
         let (mut aware, handle) = FaultAwareStage::wrap(Box::new(Passthrough));
         handle.lock().unwrap().active = Some(ActiveFaultConfig {
-            fault_type: FaultType::StageFailure { stage_index: 0, error_message: "oops".into() },
+            fault_type: FaultType::StageFailure {
+                stage_index: 0,
+                error_message: "oops".into(),
+            },
             remaining: Some(1),
         });
         assert!(aware.execute(evt()).is_err());
@@ -385,7 +405,9 @@ mod tests {
     fn test_network_partition_fault() {
         let (mut aware, handle) = FaultAwareStage::wrap(Box::new(Passthrough));
         handle.lock().unwrap().active = Some(ActiveFaultConfig {
-            fault_type: FaultType::NetworkPartition { affected_stages: vec![] },
+            fault_type: FaultType::NetworkPartition {
+                affected_stages: vec![],
+            },
             remaining: None,
         });
         assert!(aware.execute(evt()).is_err());
@@ -395,7 +417,9 @@ mod tests {
     fn test_resource_exhaustion_fault() {
         let (mut aware, handle) = FaultAwareStage::wrap(Box::new(Passthrough));
         handle.lock().unwrap().active = Some(ActiveFaultConfig {
-            fault_type: FaultType::ResourceExhaustion { resource_type: "memory".into() },
+            fault_type: FaultType::ResourceExhaustion {
+                resource_type: "memory".into(),
+            },
             remaining: Some(1),
         });
         let err = aware.execute(evt()).unwrap_err().to_string();
@@ -409,7 +433,8 @@ mod tests {
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(wrapped.stage));
 
-        inj.activate_failure("stage", "test error", Some(2)).unwrap();
+        inj.activate_failure("stage", "test error", Some(2))
+            .unwrap();
         assert!(pipeline.process_event(evt()).is_err());
         assert!(pipeline.process_event(evt()).is_err());
         assert!(pipeline.process_event(evt()).unwrap().is_some()); // auto-cleared
@@ -440,11 +465,17 @@ mod tests {
         let mut pipeline = Pipeline::new();
         pipeline.add_stage(Box::new(aware));
 
-        let e1 = Event { data: serde_json::json!({"n": 1}), metadata: None };
+        let e1 = Event {
+            data: serde_json::json!({"n": 1}),
+            metadata: None,
+        };
         assert!(pipeline.process_event(e1).unwrap().is_some());
 
         handle.lock().unwrap().active = Some(ActiveFaultConfig {
-            fault_type: FaultType::StageFailure { stage_index: 0, error_message: "t".into() },
+            fault_type: FaultType::StageFailure {
+                stage_index: 0,
+                error_message: "t".into(),
+            },
             remaining: Some(2),
         });
         assert!(pipeline.process_event(evt()).is_err());

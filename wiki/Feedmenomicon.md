@@ -168,7 +168,8 @@ println!("Compliance score: {:.1}", report.compliance_score);
 `ReplayManager` records and compares pipeline specifications:
 
 ```rust
-use feedme::replay::ReplayManager;
+use feedme::replay_spec::{PipelineReplaySpec, StageRegistry}; // structural specs (preferred)
+// replay.rs still provides ExecutionTrace for runtime determinism verification only.
 
 let mut manager = ReplayManager::new();
 manager.serialize_pipeline(&pipeline, "v1.0")?;
@@ -194,26 +195,26 @@ feedme run --input events.ndjson --require level,message
 
 ---
 
-## Code Structure
+## Code Structure (cleaned)
 
 ```
 feedme/
 ├── src/
-│   ├── lib.rs               # Pipeline, stages, metrics, InputSource
-│   ├── fused.rs             # Rule evaluation engine: TrieNode, FusedRuleEngine, Rule, Predicate
-│   ├── invariant_ppt.rs     # PPT invariant system, PptManager, regression detection
-│   ├── replay.rs            # ReplayManager, SpecComparison
-│   ├── fault_injection.rs   # FaultInjector, FaultAwareStage
-│   ├── audit.rs             # AuditManager, AttestationBundle, compliance
-│   └── bin/
-│       └── feedme.rs        # CLI (validate, run)
-├── examples/                # 15 annotated examples
-├── benches/                 # Criterion benchmarks
-├── docs/                    # Design rationale, invariants guide
-├── fuzz/                    # Fuzz targets (cargo-fuzz)
+│   ├── lib.rs               # Core + replay_spec (unified structural)
+│   ├── fused.rs             # Single-pass
+│   ├── invariant_ppt.rs     # Guards
+│   ├── replay.rs            # Traces only
+│   ├── fault_injection.rs   # Test faults
+│   ├── audit.rs             # Attest/compliance
+│   └── bin/                 # Demo CLI
+├── examples/ (17 hardened)
+├── benches/ (realistic)
+├── docs/
+├── fuzz/
 └── wiki/
-    └── Feedmenomicon.md     # This file
 ```
+
+Replay: `replay_spec` primary (from_pipeline etc.); `replay.rs` traces. Parser: extension (see lib docs + ex06).
 
 ---
 

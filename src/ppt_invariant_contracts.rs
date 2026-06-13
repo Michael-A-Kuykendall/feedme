@@ -1,6 +1,9 @@
 use crate::invariant_ppt;
-use crate::{Event, Pipeline, PipelineError, Stage, StdoutOutput, InputSource, Filter, RequiredFields, FieldSelect};
 use crate::replay_spec::ReplayableStage;
+use crate::{
+    Event, FieldSelect, Filter, InputSource, Pipeline, PipelineError, RequiredFields, Stage,
+    StdoutOutput,
+};
 
 struct Passthrough;
 
@@ -49,8 +52,11 @@ fn contract_pipeline_metrics_laws_exercised() {
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(Passthrough));
 
-    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).expect("Failed to create test event");
-    let _ = pipeline.process_event(event).expect("Pipeline processing failed"); // Result ignored for invariant testing
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#)
+        .expect("Failed to create test event");
+    let _ = pipeline
+        .process_event(event)
+        .expect("Pipeline processing failed"); // Result ignored for invariant testing
 
     assert!(invariant_ppt::contract_test(
         "pipeline metrics laws",
@@ -70,8 +76,11 @@ fn contract_drop_only_counts_for_non_output_stage() {
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(Dropper));
 
-    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).expect("Failed to create test event");
-    let out = pipeline.process_event(event).expect("Pipeline processing failed");
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#)
+        .expect("Failed to create test event");
+    let out = pipeline
+        .process_event(event)
+        .expect("Pipeline processing failed");
     assert!(out.is_none());
 
     assert!(invariant_ppt::contract_test(
@@ -89,8 +98,11 @@ fn contract_drop_only_counts_for_non_output_stage() {
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(OutputSink));
 
-    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).expect("Failed to create test event");
-    let out = pipeline.process_event(event).expect("Pipeline processing failed");
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#)
+        .expect("Failed to create test event");
+    let out = pipeline
+        .process_event(event)
+        .expect("Pipeline processing failed");
     assert!(out.is_none());
 
     // This invariant is checked in the core logic, and this contract ensures the check executes.
@@ -109,8 +121,11 @@ fn metrics_export_is_pure() {
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(Passthrough));
 
-    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).expect("Failed to create test event");
-    let _ = pipeline.process_event(event).expect("Pipeline processing failed"); // Result ignored for purity testing
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#)
+        .expect("Failed to create test event");
+    let _ = pipeline
+        .process_event(event)
+        .expect("Pipeline processing failed"); // Result ignored for purity testing
 
     let a = pipeline.export_prometheus();
     let b = pipeline.export_prometheus();
@@ -134,11 +149,13 @@ fn contract_directory_determinism() {
 
     {
         let mut file1 = fs::File::create(&file1_path).expect("Failed to create file1");
-        writeln!(file1, r#"{{"level":"info","message":"first"}}"#).expect("Failed to write to file1");
+        writeln!(file1, r#"{{"level":"info","message":"first"}}"#)
+            .expect("Failed to write to file1");
     }
     {
         let mut file2 = fs::File::create(&file2_path).expect("Failed to create file2");
-        writeln!(file2, r#"{{"level":"info","message":"second"}}"#).expect("Failed to write to file2");
+        writeln!(file2, r#"{{"level":"info","message":"second"}}"#)
+            .expect("Failed to write to file2");
     }
 
     // Process directory twice
@@ -148,9 +165,15 @@ fn contract_directory_determinism() {
         pipeline.add_stage(Box::new(StdoutOutput::new()));
 
         let mut input = InputSource::Directory(temp_dir.path().to_path_buf());
-        input.process_input(&mut pipeline, &mut None).expect("Failed to process input");
+        input
+            .process_input(&mut pipeline, &mut None)
+            .expect("Failed to process input");
         // Only compare non-timing metrics
-        pipeline.export_json_logs().into_iter().filter(|s| !s.contains("stage_latencies")).collect::<Vec<_>>()
+        pipeline
+            .export_json_logs()
+            .into_iter()
+            .filter(|s| !s.contains("stage_latencies"))
+            .collect::<Vec<_>>()
     };
 
     let output1 = run1();
@@ -169,8 +192,11 @@ fn contract_no_output_after_drop() {
     pipeline.add_stage(Box::new(Filter::new(Box::new(|_| false)))); // Always drops
     pipeline.add_stage(Box::new(RequiredFields::new(vec!["nonexistent".into()]))); // Would fail
 
-    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#).expect("Failed to create test event");
-    let result = pipeline.process_event(event).expect("Pipeline processing failed");
+    let event = Event::from_raw_input(r#"{"level":"info","message":"hello"}"#)
+        .expect("Failed to create test event");
+    let result = pipeline
+        .process_event(event)
+        .expect("Pipeline processing failed");
     assert!(result.is_none()); // Event was dropped
 
     // If RequiredFields executed, it would have failed, but it didn't
@@ -216,10 +242,12 @@ fn replay_spec_serialization_roundtrip() {
     println!("Serialized spec: {}", json);
 
     // Deserialize back
-    let _deserialized: PipelineReplaySpec = serde_json::from_str(&json).expect("Failed to deserialize");
+    let _deserialized: PipelineReplaySpec =
+        serde_json::from_str(&json).expect("Failed to deserialize");
 
     // Verify the spec_hash gets computed correctly
-    let spec_with_hash = PipelineReplaySpec::from_stages(stages).expect("Failed to create spec with hash");
+    let spec_with_hash =
+        PipelineReplaySpec::from_stages(stages).expect("Failed to create spec with hash");
     assert!(!spec_with_hash.spec_hash.is_empty());
     assert_eq!(spec_with_hash.feedme_version, env!("CARGO_PKG_VERSION"));
     assert_eq!(spec_with_hash.stages.len(), 2);
@@ -298,7 +326,10 @@ fn replayable_stage_trait() {
 
     assert_eq!(spec.stage_id, "field_select");
     assert_eq!(spec.stage_version, "1.0");
-    assert_eq!(spec.config["fields"], serde_json::json!(["level", "message"]));
+    assert_eq!(
+        spec.config["fields"],
+        serde_json::json!(["level", "message"])
+    );
 
     let required_fields = RequiredFields::new(vec!["level".to_string()]);
     let spec2 = required_fields.to_spec();
@@ -315,15 +346,21 @@ fn stage_registry_functionality() {
     let mut registry = StageRegistry::new();
 
     // Register factories
-    registry.register_stage("field_select".to_string(), Box::new(|config| {
-        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
-        Ok(Box::new(FieldSelect::new(fields)))
-    }));
+    registry.register_stage(
+        "field_select".to_string(),
+        Box::new(|config| {
+            let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+            Ok(Box::new(FieldSelect::new(fields)))
+        }),
+    );
 
-    registry.register_stage("required_fields".to_string(), Box::new(|config| {
-        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
-        Ok(Box::new(RequiredFields::new(fields)))
-    }));
+    registry.register_stage(
+        "required_fields".to_string(),
+        Box::new(|config| {
+            let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+            Ok(Box::new(RequiredFields::new(fields)))
+        }),
+    );
 
     // Test registration
     assert!(registry.is_replayable(&"field_select".to_string()));
@@ -337,7 +374,9 @@ fn stage_registry_functionality() {
         config: serde_json::json!({"fields": ["level", "message"]}),
     };
 
-    let stage = registry.create_stage(&field_select_spec).expect("Failed to create stage");
+    let stage = registry
+        .create_stage(&field_select_spec)
+        .expect("Failed to create stage");
     assert_eq!(stage.name(), "FieldSelect");
 }
 
@@ -382,7 +421,7 @@ fn pipeline_health_check() {
 
 #[test]
 fn performance_regression_detection() {
-    use invariant_ppt::{PipelineMetrics, check_performance_regression};
+    use invariant_ppt::{check_performance_regression, PipelineMetrics};
 
     let baseline = PipelineMetrics {
         stage_count: 2,
@@ -423,26 +462,42 @@ fn replay_from_pipeline_roundtrip_unified() {
     use crate::replay_spec::*;
 
     let mut reg = StageRegistry::new();
-    reg.register_stage("field_select".to_string(), Box::new(|c| {
-        let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
-        Ok(Box::new(FieldSelect::new(fields)))
-    }));
-    reg.register_stage("required_fields".to_string(), Box::new(|c| {
-        let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
-        Ok(Box::new(RequiredFields::new(fields)))
-    }));
-    reg.register_stage("stdout_output".to_string(), Box::new(|_c| Ok(Box::new(StdoutOutput::new()))));
+    reg.register_stage(
+        "field_select".to_string(),
+        Box::new(|c| {
+            let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
+            Ok(Box::new(FieldSelect::new(fields)))
+        }),
+    );
+    reg.register_stage(
+        "required_fields".to_string(),
+        Box::new(|c| {
+            let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
+            Ok(Box::new(RequiredFields::new(fields)))
+        }),
+    );
+    reg.register_stage(
+        "stdout_output".to_string(),
+        Box::new(|_c| Ok(Box::new(StdoutOutput::new()))),
+    );
 
     let mut p = Pipeline::new();
-    p.add_stage(Box::new(FieldSelect::new(vec!["level".into(), "message".into()])));
+    p.add_stage(Box::new(FieldSelect::new(vec![
+        "level".into(),
+        "message".into(),
+    ])));
     p.add_stage(Box::new(RequiredFields::new(vec!["level".into()])));
     p.add_stage(Box::new(StdoutOutput::new()));
 
     // Now works thanks to unified from_pipeline + ReplayableStage impls on core stages
-    let spec = PipelineReplaySpec::from_pipeline(&p, &reg).expect("from_pipeline must succeed for replayable stages");
+    let spec = PipelineReplaySpec::from_pipeline(&p, &reg)
+        .expect("from_pipeline must succeed for replayable stages");
     assert_eq!(spec.stages.len(), 3);
 
     let p2 = spec.to_pipeline(&reg).expect("to_pipeline roundtrip");
     assert_eq!(p2.stage_count(), 3);
-    assert_eq!(p2.stage_names(), vec!["FieldSelect", "RequiredFields", "StdoutOutput"]);
+    assert_eq!(
+        p2.stage_names(),
+        vec!["FieldSelect", "RequiredFields", "StdoutOutput"]
+    );
 }
