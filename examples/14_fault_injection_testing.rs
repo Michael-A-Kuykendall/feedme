@@ -30,7 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline.add_stage(Box::new(wrapped.stage)); // ← the fault-injectable stage
     pipeline.add_stage(Box::new(StdoutOutput::new()));
 
-    let mut deadletter = Deadletter::new(PathBuf::from("samples/errors.ndjson"));
+    // Use temp for hardening user-surface testing
+    let dl_path: PathBuf = std::env::temp_dir().join(format!("feedme_fault_deadletter_{}.ndjson", std::process::id()));
+    let mut deadletter = Deadletter::new(dl_path.clone());
 
     let events = vec![
         json!({"level": "info",  "message": "started",        "user": "alice"}),
@@ -79,5 +81,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── After 2 faults, the stage auto-clears and works normally again ──────
     println!("\nFault cleared — pipeline is healthy again.");
+
+    // Harden for user-surface: assert injected faults and cleanup
+    assert!(pipeline.error_count() >= 2);
+    let _ = std::fs::remove_file(dl_path);
+
     Ok(())
 }
