@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extended `replay` module with `ReplayManager`: pipeline spec serialization, A/B comparison, config drift detection
 - Removed `feedme-pro` workspace member and all `gatewarden` license-gate dependencies
 
+## [0.3.0] - 2026-06-13
+
+### ✨ **Expanded Examples & Features**
+- Added 5 new examples demonstrating core capabilities:
+  - **17_fused_rule_engine**: The O(M) selector-first rule evaluation (FSE architecture)
+  - **18_derived_and_remap**: DerivedFields + FieldRemap transformations
+  - **19_constraints_and_types**: TypeChecking + ValueConstraints validation
+  - **20_file_output**: Writing processed events to files
+  - **21_common_pipeline**: Ergonomic `common_redact_validate_pipeline()` helper
+- Added `common_redact_validate_pipeline()`: One-call production-ready pipeline
+
+### 🐛 **Bug Fixes**
+- Fixed example registration in Cargo.toml (examples 13-16 weren't listed)
+- Various example improvements for clarity
+
+### 📚 **Documentation**
+- Updated README to reflect all available examples
+- Enhanced wiki documentation for new features
+
 ## [0.2.0] - 2025-12-20
 
 ### 🔄 **Version Correction**

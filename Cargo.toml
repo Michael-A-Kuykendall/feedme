@@ -4,10 +4,10 @@ exclude = ["fuzz"]
 
 [package]
 name = "feedme"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "Deterministic streaming pipeline engine with single-pass rule evaluation, fault injection, baseline regression detection, and attestation."
+description = "Deterministic streaming pipeline engine with FSE (selector-first single-pass rule evaluation), fault injection, baseline regression detection, audit attestation, and pipeline evolution tracking."
 documentation = "https://docs.rs/feedme"
 homepage = "https://github.com/Michael-A-Kuykendall/feedme"
 repository = "https://github.com/Michael-A-Kuykendall/feedme"
@@ -19,6 +19,7 @@ exclude = [
     "*.html",
     "coverage/",
     "artifacts/",
+    "wiki/",
     ".claude/",
     ".copilot/",
     "**/.claude/",
@@ -94,6 +95,42 @@ path = "examples/11_config_driven_pipeline.rs"
 [[example]]
 name = "12_error_handling_variations"
 path = "examples/12_error_handling_variations.rs"
+
+[[example]]
+name = "13_performance_baseline_guard"
+path = "examples/13_performance_baseline_guard.rs"
+
+[[example]]
+name = "14_fault_injection_testing"
+path = "examples/14_fault_injection_testing.rs"
+
+[[example]]
+name = "15_audit_trail"
+path = "examples/15_audit_trail.rs"
+
+[[example]]
+name = "16_pipeline_evolution"
+path = "examples/16_pipeline_evolution.rs"
+
+[[example]]
+name = "17_fused_rule_engine"
+path = "examples/17_fused_rule_engine.rs"
+
+[[example]]
+name = "18_derived_and_remap"
+path = "examples/18_derived_and_remap.rs"
+
+[[example]]
+name = "19_constraints_and_types"
+path = "examples/19_constraints_and_types.rs"
+
+[[example]]
+name = "20_file_output"
+path = "examples/20_file_output.rs"
+
+[[example]]
+name = "21_common_pipeline"
+path = "examples/21_common_pipeline.rs"
 
 [[example]]
 name = "99_failure_tour"

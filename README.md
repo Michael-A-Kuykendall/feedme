@@ -40,11 +40,12 @@ It provides a linear, deterministic processing model with bounded resource usage
 - **Deterministic processing** — same input + same config → same output
 - **Structured errors** — stage, code, and message for every failure
 - **Observability** — metrics exportable (Prometheus or JSON) without affecting execution
-- **Single-pass semantic evaluation** — multiple rules collapse into one traversal; runtime stays independent of rule count for shared selectors
+- **Fused Rule Engine (FSE)** — FeedMe's signature O(M) selector-first single-pass rule evaluation — runtime stays independent of rule count for shared selectors
 - **Fault injection** — wrap any stage in `FaultAwareStage` to inject failures, timeouts, or resource exhaustion
 - **Baseline regression detection** — `PptManager` captures performance baselines and reports regressions
-- **Pipeline attestation** — `AuditManager` generates compliance bundles and audit trails
-- **Replay & A/B comparison** — `ReplayManager` serialises pipeline specs and diffs for config drift detection
+- **Pipeline attestation** — `AuditManager` generates compliance bundles and audit trails with cryptographic hashes
+- **Pipeline evolution tracking** — `PipelineReplaySpec` enables A/B comparison and config drift detection
+- **Ergonomic helpers** — `common_redact_validate_pipeline()` for one-call production pipelines
 - **Extensible** — add custom stages via a defined plugin contract
 
 ## Mechanical Guarantees
@@ -238,10 +239,18 @@ FeedMe includes 16 examples. These are the highlights:
 | Export Prometheus or JSON metrics | [07_metrics_export_demo](examples/07_metrics_export_demo.rs) |
 | Stream from stdin without buffering | [08_stdin_streaming](examples/08_stdin_streaming.rs) |
 | Multi-stage ETL with deadletter | [09_complex_pipeline](examples/09_complex_pipeline.rs) |
+| Plugin system for custom stages | [10_plugin_usage](examples/10_plugin_usage.rs) |
+| Config-driven pipeline from YAML | [11_config_driven_pipeline](examples/11_config_driven_pipeline.rs) |
+| Error handling patterns | [12_error_handling_variations](examples/12_error_handling_variations.rs) |
 | Prove your pipeline doesn't slow down (CI guard) | [13_performance_baseline_guard](examples/13_performance_baseline_guard.rs) |
 | Test what happens when a stage breaks | [14_fault_injection_testing](examples/14_fault_injection_testing.rs) |
 | Generate an audit trail with compliance checks | [15_audit_trail](examples/15_audit_trail.rs) |
 | Track and diff pipeline config between versions | [16_pipeline_evolution](examples/16_pipeline_evolution.rs) |
+| **Fused Rule Engine (O(M) selector-first)** | [17_fused_rule_engine](examples/17_fused_rule_engine.rs) |
+| Derived fields and field remapping | [18_derived_and_remap](examples/18_derived_and_remap.rs) |
+| Type checking and value constraints | [19_constraints_and_types](examples/19_constraints_and_types.rs) |
+| Write processed events to files | [20_file_output](examples/20_file_output.rs) |
+| One-call production pipeline | [21_common_pipeline](examples/21_common_pipeline.rs) |
 
 Run any example:
 ```bash
