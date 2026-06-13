@@ -31,7 +31,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     pipeline.add_stage(Box::new(StdoutOutput::new()));
 
     // Use temp for hardening user-surface testing
-    let dl_path: PathBuf = std::env::temp_dir().join(format!("feedme_fault_deadletter_{}.ndjson", std::process::id()));
+    let dl_path: PathBuf = std::env::temp_dir().join(format!(
+        "feedme_fault_deadletter_{}.ndjson",
+        std::process::id()
+    ));
     let mut deadletter = Deadletter::new(dl_path.clone());
 
     let events = vec![
@@ -44,7 +47,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Pass 1: normal operation ────────────────────────────────────────────
     println!("=== Pass 1: normal ===");
     for data in &events {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         match pipeline.process_event(ev) {
             Ok(Some(_)) => {}
             Ok(None) => {}
@@ -53,7 +59,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    println!("Processed: {}, Errors: {}", pipeline.events_processed(), pipeline.error_count());
+    println!(
+        "Processed: {}, Errors: {}",
+        pipeline.events_processed(),
+        pipeline.error_count()
+    );
 
     // ── Inject a failure: the enrich stage errors on the next 2 events ─────
     injector.activate_failure("enrich", "upstream enrichment service down", Some(2))?;
@@ -61,14 +71,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Pass 2: with fault active ───────────────────────────────────────────
     println!("\n=== Pass 2: fault injected (2 failures, then auto-clears) ===");
     for data in events.iter().chain(events.iter()) {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         match pipeline.process_event(ev) {
             Ok(Some(_)) => {}
             Ok(None) => {}
             Err(e) => {
                 eprintln!("  caught fault: {}", e);
                 // In production you'd send to deadletter, retry, etc.
-                let dead_ev = Event { data: json!({"error": e.to_string()}), metadata: None };
+                let dead_ev = Event {
+                    data: json!({"error": e.to_string()}),
+                    metadata: None,
+                };
                 let _ = deadletter.execute(dead_ev);
             }
         }

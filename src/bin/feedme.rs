@@ -83,7 +83,10 @@ fn cmd_validate(input: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     let processed = pipeline.events_processed();
     let errors = pipeline.error_count();
-    eprintln!("validated: {} events processed, {} errors", processed, errors);
+    eprintln!(
+        "validated: {} events processed, {} errors",
+        processed, errors
+    );
 
     if errors > 0 {
         std::process::exit(1);

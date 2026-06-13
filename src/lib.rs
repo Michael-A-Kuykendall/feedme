@@ -66,13 +66,13 @@
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
 use std::time::Instant;
-use sha2::{Digest, Sha256};
 
 /// Pipeline serialization for deterministic replay and A/B comparison.
 /// Only serializes pipeline definition, not runtime state.
@@ -184,7 +184,10 @@ pub mod replay_spec {
 
     impl PipelineReplaySpec {
         /// Create a spec from a pipeline (requires all stages to support to_replay_spec via ReplayableStage).
-        pub fn from_pipeline(pipeline: &Pipeline, _registry: &StageRegistry) -> Result<Self, PipelineError> {
+        pub fn from_pipeline(
+            pipeline: &Pipeline,
+            _registry: &StageRegistry,
+        ) -> Result<Self, PipelineError> {
             let stage_specs = pipeline.extract_replay_specs();
             if stage_specs.len() != pipeline.stages.len() {
                 return Err(PipelineError::System(SystemError {
@@ -297,10 +300,14 @@ pub mod replay_spec {
     /// Trait for stages that support replay serialization
     pub trait ReplayableStage {
         /// Get stable stage identifier
-        fn stage_id() -> StageId where Self: Sized;
+        fn stage_id() -> StageId
+        where
+            Self: Sized;
 
         /// Get stage version
-        fn stage_version() -> StageVersion where Self: Sized;
+        fn stage_version() -> StageVersion
+        where
+            Self: Sized;
 
         /// Convert stage to spec (config only, no runtime state)
         fn to_spec(&self) -> StageSpec;
@@ -322,7 +329,8 @@ pub mod audit;
 
 pub(crate) const INVARIANT_PROCESSED_INCREMENTS_ONCE: &str =
     "processed increments exactly once per process_event";
-pub(crate) const INVARIANT_ERRORS_INCREMENT_ON_ERROR: &str = "errors increment exactly once per error";
+pub(crate) const INVARIANT_ERRORS_INCREMENT_ON_ERROR: &str =
+    "errors increment exactly once per error";
 pub(crate) const INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE: &str =
     "dropped increments only when non-output stage returns None";
 pub(crate) const INVARIANT_OUTPUT_NONE_NOT_DROPPED: &str =
@@ -346,7 +354,7 @@ pub struct Event {
 }
 
 impl Event {
-    /// Create a new event from raw input (assuming JSON for now).
+    /// Create a new event from raw input (JSON assumed).
     pub fn from_raw_input(input: &str) -> anyhow::Result<Self> {
         let data: serde_json::Value = serde_json::from_str(input)?;
         Ok(Event {
@@ -971,21 +979,11 @@ impl Pipeline {
     /// event-stage executions. A stage that runs 10,000 events contributes
     /// proportionally more than one that runs 10.
     pub fn avg_latency_ms(&self) -> f64 {
-        let total_count: u64 = self
-            .metrics
-            .stage_latencies
-            .values()
-            .map(|s| s.count)
-            .sum();
+        let total_count: u64 = self.metrics.stage_latencies.values().map(|s| s.count).sum();
         if total_count == 0 {
             return 0.0;
         }
-        let total_sum: f64 = self
-            .metrics
-            .stage_latencies
-            .values()
-            .map(|s| s.sum)
-            .sum();
+        let total_sum: f64 = self.metrics.stage_latencies.values().map(|s| s.sum).sum();
         total_sum / total_count as f64
     }
 
@@ -1192,8 +1190,10 @@ impl InputSource {
     }
 }
 
-/// Parsers: convert raw bytes to Event with explicit error handling.
-/// Best effort syslog, zero copy where possible, no implicit recovery.
+/// Parsers: optional extension for custom byte-to-Event conversion.
+/// Main `InputSource` uses direct JSON. Use for syslog or other formats via
+/// custom stages or wrappers. The provided impls (NDJSON, JSONArray, Syslog)
+/// are best-effort examples.
 pub trait Parser {
     fn parse(&self, raw: &[u8]) -> Result<Event, PipelineError>;
 }
@@ -1257,8 +1257,7 @@ impl Parser for SyslogParser {
                 message: e.to_string(),
             })
         })?;
-        // Simple syslog: <pri>timestamp host message
-        // For now, create an event with the raw string
+        // Simple syslog: <pri>timestamp host message. Raw string kept for downstream parsing.
         Ok(Event {
             data: serde_json::json!({ "message": s }),
             metadata: None,
@@ -1796,11 +1795,13 @@ impl Stage for FileOutput {
                 .append(true)
                 .create(true)
                 .open(&self.path)
-                .map_err(|e| PipelineError::Output(OutputError {
-                    stage: "File".to_string(),
-                    code: OutputErrorCode::IoError,
-                    message: e.to_string(),
-                }))?;
+                .map_err(|e| {
+                    PipelineError::Output(OutputError {
+                        stage: "File".to_string(),
+                        code: OutputErrorCode::IoError,
+                        message: e.to_string(),
+                    })
+                })?;
             self.file = Some(BufWriter::new(f));
         }
         let writer = self.file.as_mut().unwrap();
@@ -1813,16 +1814,20 @@ impl Stage for FileOutput {
                 message: e.to_string(),
             }))?
         )
-        .map_err(|e| PipelineError::Output(OutputError {
-            stage: "File".to_string(),
-            code: OutputErrorCode::IoError,
-            message: e.to_string(),
-        }))?;
-        writer.flush().map_err(|e| PipelineError::Output(OutputError {
-            stage: "File".to_string(),
-            code: OutputErrorCode::IoError,
-            message: e.to_string(),
-        }))?;
+        .map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "File".to_string(),
+                code: OutputErrorCode::IoError,
+                message: e.to_string(),
+            })
+        })?;
+        writer.flush().map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "File".to_string(),
+                code: OutputErrorCode::IoError,
+                message: e.to_string(),
+            })
+        })?;
         Ok(None) // Consumed
     }
 
@@ -1876,11 +1881,13 @@ impl Stage for Deadletter {
                 .append(true)
                 .create(true)
                 .open(&self.path)
-                .map_err(|e| PipelineError::Output(OutputError {
-                    stage: "Deadletter".to_string(),
-                    code: OutputErrorCode::IoError,
-                    message: e.to_string(),
-                }))?;
+                .map_err(|e| {
+                    PipelineError::Output(OutputError {
+                        stage: "Deadletter".to_string(),
+                        code: OutputErrorCode::IoError,
+                        message: e.to_string(),
+                    })
+                })?;
             self.file = Some(BufWriter::new(f));
         }
         let writer = self.file.as_mut().unwrap();
@@ -1893,16 +1900,20 @@ impl Stage for Deadletter {
                 message: e.to_string(),
             }))?
         )
-        .map_err(|e| PipelineError::Output(OutputError {
-            stage: "Deadletter".to_string(),
-            code: OutputErrorCode::IoError,
-            message: e.to_string(),
-        }))?;
-        writer.flush().map_err(|e| PipelineError::Output(OutputError {
-            stage: "Deadletter".to_string(),
-            code: OutputErrorCode::IoError,
-            message: e.to_string(),
-        }))?;
+        .map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "Deadletter".to_string(),
+                code: OutputErrorCode::IoError,
+                message: e.to_string(),
+            })
+        })?;
+        writer.flush().map_err(|e| {
+            PipelineError::Output(OutputError {
+                stage: "Deadletter".to_string(),
+                code: OutputErrorCode::IoError,
+                message: e.to_string(),
+            })
+        })?;
         Ok(None) // Consumed
     }
 
@@ -1961,7 +1972,10 @@ impl Config {
 
     /// Build a Pipeline from the config's stages list using the given registry.
     /// Ties directly into the unified replay_spec machinery for "bells and whistles" config-driven use.
-    pub fn build_pipeline(&self, registry: &replay_spec::StageRegistry) -> Result<Pipeline, PipelineError> {
+    pub fn build_pipeline(
+        &self,
+        registry: &replay_spec::StageRegistry,
+    ) -> Result<Pipeline, PipelineError> {
         if self.version != 1 {
             return Err(PipelineError::System(SystemError {
                 stage: "Config".to_string(),
@@ -1983,7 +1997,11 @@ impl Config {
 /// Ergonomic preset for a common "bells and whistles" redact + select + validate pipeline.
 /// Returns a fully replayable pipeline (all stages now implement ReplayableStage).
 /// Fits the "preferred complete pipe" shape: one call brings PII + projection + required without user wiring.
-pub fn common_redact_validate_pipeline(select_fields: Vec<String>, required_fields: Vec<String>, pii_patterns: Vec<regex::Regex>) -> Pipeline {
+pub fn common_redact_validate_pipeline(
+    select_fields: Vec<String>,
+    required_fields: Vec<String>,
+    pii_patterns: Vec<regex::Regex>,
+) -> Pipeline {
     let mut p = Pipeline::new();
     p.add_stage(Box::new(PIIRedaction::new(pii_patterns)));
     p.add_stage(Box::new(FieldSelect::new(select_fields)));
@@ -2574,19 +2592,40 @@ mod tests {
         assert_eq!(format!("{}", ParseErrorCode::Test), "TEST");
 
         // Test TransformErrorCode display
-        assert_eq!(format!("{}", TransformErrorCode::MissingField), "MISSING_FIELD");
-        assert_eq!(format!("{}", TransformErrorCode::TypeMismatch), "TYPE_MISMATCH");
-        assert_eq!(format!("{}", TransformErrorCode::ConstraintViolation), "CONSTRAINT_VIOLATION");
+        assert_eq!(
+            format!("{}", TransformErrorCode::MissingField),
+            "MISSING_FIELD"
+        );
+        assert_eq!(
+            format!("{}", TransformErrorCode::TypeMismatch),
+            "TYPE_MISMATCH"
+        );
+        assert_eq!(
+            format!("{}", TransformErrorCode::ConstraintViolation),
+            "CONSTRAINT_VIOLATION"
+        );
         assert_eq!(format!("{}", TransformErrorCode::Test), "TEST");
 
         // Test ValidationErrorCode display
-        assert_eq!(format!("{}", ValidationErrorCode::MissingField), "MISSING_FIELD");
-        assert_eq!(format!("{}", ValidationErrorCode::TypeMismatch), "TYPE_MISMATCH");
-        assert_eq!(format!("{}", ValidationErrorCode::ConstraintViolation), "CONSTRAINT_VIOLATION");
+        assert_eq!(
+            format!("{}", ValidationErrorCode::MissingField),
+            "MISSING_FIELD"
+        );
+        assert_eq!(
+            format!("{}", ValidationErrorCode::TypeMismatch),
+            "TYPE_MISMATCH"
+        );
+        assert_eq!(
+            format!("{}", ValidationErrorCode::ConstraintViolation),
+            "CONSTRAINT_VIOLATION"
+        );
         assert_eq!(format!("{}", ValidationErrorCode::Test), "TEST");
 
         // Test OutputErrorCode display
-        assert_eq!(format!("{}", OutputErrorCode::SerializeError), "SERIALIZE_ERROR");
+        assert_eq!(
+            format!("{}", OutputErrorCode::SerializeError),
+            "SERIALIZE_ERROR"
+        );
         assert_eq!(format!("{}", OutputErrorCode::IoError), "IO_ERROR");
         assert_eq!(format!("{}", OutputErrorCode::Test), "TEST");
 
@@ -3519,11 +3558,14 @@ mod tests {
 
     #[test]
     fn test_replay_execution() {
-        use tempfile::NamedTempFile;
         use crate::replay::{record_execution, replay_execution};
+        use tempfile::NamedTempFile;
 
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+        pipeline.add_stage(Box::new(FieldSelect::new(vec![
+            "level".to_string(),
+            "message".to_string(),
+        ])));
         pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
 
         let events = vec![
@@ -3545,7 +3587,10 @@ mod tests {
 
         // Create fresh pipeline for replay
         let mut replay_pipeline = Pipeline::new();
-        replay_pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+        replay_pipeline.add_stage(Box::new(FieldSelect::new(vec![
+            "level".to_string(),
+            "message".to_string(),
+        ])));
         replay_pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
 
         // Replay and verify

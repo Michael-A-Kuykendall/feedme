@@ -12,7 +12,10 @@ use serde_json::json;
 
 fn build_v1() -> Pipeline {
     let mut p = Pipeline::new();
-    p.add_stage(Box::new(RequiredFields::new(vec!["level".into(), "message".into()])));
+    p.add_stage(Box::new(RequiredFields::new(vec![
+        "level".into(),
+        "message".into(),
+    ])));
     p.add_stage(Box::new(Filter::new(Box::new(|ev| {
         ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")
     }))));
@@ -23,15 +26,19 @@ fn build_v1() -> Pipeline {
 fn build_v2() -> Pipeline {
     // v2 adds PII redaction and a field selector before the filter
     let mut p = Pipeline::new();
-    p.add_stage(Box::new(PIIRedaction::new(vec![
-        regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b").unwrap(),
-    ])));
+    p.add_stage(Box::new(PIIRedaction::new(vec![regex::Regex::new(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+    )
+    .unwrap()])));
     p.add_stage(Box::new(FieldSelect::new(vec![
         "level".into(),
         "message".into(),
         "user".into(),
     ])));
-    p.add_stage(Box::new(RequiredFields::new(vec!["level".into(), "message".into()])));
+    p.add_stage(Box::new(RequiredFields::new(vec![
+        "level".into(),
+        "message".into(),
+    ])));
     p.add_stage(Box::new(Filter::new(Box::new(|ev| {
         ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")
     }))));
@@ -46,24 +53,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use the unified advanced replay_spec (replay.rs structural path is now thin/legacy; prefer this for full config capture)
     let mut registry = StageRegistry::new();
     // Register built-in factories for roundtrip (in real use, register your stages)
-    registry.register_stage("required_fields".to_string(), Box::new(|config| {
-        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
-        Ok(Box::new(RequiredFields::new(fields)))
-    }));
-    registry.register_stage("filter".to_string(), Box::new(|_config| {
-        // For demo; real closure predicates would be reconstructed by user code
-        Ok(Box::new(Filter::new(Box::new(|ev| ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")))))
-    }));
-    registry.register_stage("stdout_output".to_string(), Box::new(|_config| Ok(Box::new(StdoutOutput::new()))));
-    registry.register_stage("pii_redaction".to_string(), Box::new(|config| {
-        let patterns: Vec<String> = serde_json::from_value(config["patterns"].clone())?;
-        let regexes = patterns.into_iter().map(|p| regex::Regex::new(&p).unwrap()).collect();
-        Ok(Box::new(PIIRedaction::new(regexes)))
-    }));
-    registry.register_stage("field_select".to_string(), Box::new(|config| {
-        let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
-        Ok(Box::new(FieldSelect::new(fields)))
-    }));
+    registry.register_stage(
+        "required_fields".to_string(),
+        Box::new(|config| {
+            let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+            Ok(Box::new(RequiredFields::new(fields)))
+        }),
+    );
+    registry.register_stage(
+        "filter".to_string(),
+        Box::new(|_config| {
+            // For demo; real closure predicates would be reconstructed by user code
+            Ok(Box::new(Filter::new(Box::new(|ev| {
+                ev.data.get("level").and_then(|v| v.as_str()) != Some("debug")
+            }))))
+        }),
+    );
+    registry.register_stage(
+        "stdout_output".to_string(),
+        Box::new(|_config| Ok(Box::new(StdoutOutput::new()))),
+    );
+    registry.register_stage(
+        "pii_redaction".to_string(),
+        Box::new(|config| {
+            let patterns: Vec<String> = serde_json::from_value(config["patterns"].clone())?;
+            let regexes = patterns
+                .into_iter()
+                .map(|p| regex::Regex::new(&p).unwrap())
+                .collect();
+            Ok(Box::new(PIIRedaction::new(regexes)))
+        }),
+    );
+    registry.register_stage(
+        "field_select".to_string(),
+        Box::new(|config| {
+            let fields: Vec<String> = serde_json::from_value(config["fields"].clone())?;
+            Ok(Box::new(FieldSelect::new(fields)))
+        }),
+    );
 
     let spec_v1 = PipelineReplaySpec::from_pipeline(&pipeline_v1, &registry)?;
     let spec_v2 = PipelineReplaySpec::from_pipeline(&pipeline_v2, &registry)?;
@@ -90,7 +117,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  - removed stage: {} (id={})", s.stage_id, s.stage_id);
         }
         for (i, a, b) in &diff.modified_stages {
-            println!("  ~ modified stage at {}: {} -> {}", i, a.stage_id, b.stage_id);
+            println!(
+                "  ~ modified stage at {}: {} -> {}",
+                i, a.stage_id, b.stage_id
+            );
         }
         if diff.settings_changed {
             println!("  ~ pipeline-level settings changed");
@@ -107,7 +137,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut outputs_v1: Vec<String> = Vec::new();
     let mut pipe1 = build_v1();
     for data in &sample_events {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         if let Ok(Some(out)) = pipe1.process_event(ev) {
             outputs_v1.push(out.data.to_string());
         }
@@ -116,7 +149,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut outputs_v2: Vec<String> = Vec::new();
     let mut pipe2 = build_v2();
     for data in &sample_events {
-        let ev = Event { data: data.clone(), metadata: None };
+        let ev = Event {
+            data: data.clone(),
+            metadata: None,
+        };
         if let Ok(Some(out)) = pipe2.process_event(ev) {
             outputs_v2.push(out.data.to_string());
         }
@@ -124,9 +160,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n=== Output Comparison ===");
     println!("v1 outputs ({}):", outputs_v1.len());
-    for o in &outputs_v1 { println!("  {}", o); }
+    for o in &outputs_v1 {
+        println!("  {}", o);
+    }
     println!("v2 outputs ({}):", outputs_v2.len());
-    for o in &outputs_v2 { println!("  {}", o); }
+    for o in &outputs_v2 {
+        println!("  {}", o);
+    }
 
     // Phase-3 polish: compose replay (structural diff) + audit (attestation) for attested evolution
     // Ties bells without new semantics.

@@ -97,49 +97,77 @@ impl Rule {
     pub fn exists(field: impl Into<String>) -> Self {
         let field = field.into();
         let name = format!("{} must exist", field);
-        Rule { field, predicate: Predicate::Exists, name }
+        Rule {
+            field,
+            predicate: Predicate::Exists,
+            name,
+        }
     }
 
     /// Field value must equal `value`.
     pub fn equals(field: impl Into<String>, value: serde_json::Value) -> Self {
         let field = field.into();
         let name = format!("{} must equal {:?}", field, value);
-        Rule { field, predicate: Predicate::Equals(value), name }
+        Rule {
+            field,
+            predicate: Predicate::Equals(value),
+            name,
+        }
     }
 
     /// Field must not equal `value`.
     pub fn not_equals(field: impl Into<String>, value: serde_json::Value) -> Self {
         let field = field.into();
         let name = format!("{} must not equal {:?}", field, value);
-        Rule { field, predicate: Predicate::NotEquals(value), name }
+        Rule {
+            field,
+            predicate: Predicate::NotEquals(value),
+            name,
+        }
     }
 
     /// Field must be of the specified JSON type.
     pub fn type_is(field: impl Into<String>, t: FieldType) -> Self {
         let field = field.into();
         let name = format!("{} must be {:?}", field, t);
-        Rule { field, predicate: Predicate::TypeIs(t), name }
+        Rule {
+            field,
+            predicate: Predicate::TypeIs(t),
+            name,
+        }
     }
 
     /// Field must be a number greater than `threshold`.
     pub fn greater_than(field: impl Into<String>, threshold: f64) -> Self {
         let field = field.into();
         let name = format!("{} must be > {}", field, threshold);
-        Rule { field, predicate: Predicate::GreaterThan(threshold), name }
+        Rule {
+            field,
+            predicate: Predicate::GreaterThan(threshold),
+            name,
+        }
     }
 
     /// Field must be a number less than `threshold`.
     pub fn less_than(field: impl Into<String>, threshold: f64) -> Self {
         let field = field.into();
         let name = format!("{} must be < {}", field, threshold);
-        Rule { field, predicate: Predicate::LessThan(threshold), name }
+        Rule {
+            field,
+            predicate: Predicate::LessThan(threshold),
+            name,
+        }
     }
 
     /// Field value must be one of the supplied values.
     pub fn one_of(field: impl Into<String>, values: Vec<serde_json::Value>) -> Self {
         let field = field.into();
         let name = format!("{} must be one of {:?}", field, values);
-        Rule { field, predicate: Predicate::In(values), name }
+        Rule {
+            field,
+            predicate: Predicate::In(values),
+            name,
+        }
     }
 
     /// Custom predicate closure.
@@ -248,7 +276,10 @@ struct TrieNode {
 
 impl TrieNode {
     fn new() -> Self {
-        TrieNode { terminal_rules: Vec::new(), children: Default::default() }
+        TrieNode {
+            terminal_rules: Vec::new(),
+            children: Default::default(),
+        }
     }
 
     /// Insert a rule at the given path (split into segments).
@@ -256,7 +287,8 @@ impl TrieNode {
         if segments.is_empty() {
             return;
         }
-        let child = self.children
+        let child = self
+            .children
             .entry(segments[0].to_string())
             .or_insert_with(TrieNode::new);
         if segments.len() == 1 {
@@ -269,7 +301,11 @@ impl TrieNode {
     /// Count unique terminal paths (unique full selectors).
     fn count_terminals(&self) -> usize {
         let here = if self.terminal_rules.is_empty() { 0 } else { 1 };
-        here + self.children.values().map(|c| c.count_terminals()).sum::<usize>()
+        here + self
+            .children
+            .values()
+            .map(|c| c.count_terminals())
+            .sum::<usize>()
     }
 
     /// Enumerate all terminal paths into `out`.
@@ -360,9 +396,15 @@ mod trie_instrument {
     thread_local! {
         static VISITS: Cell<usize> = Cell::new(0);
     }
-    pub fn record() { VISITS.with(|c| c.set(c.get() + 1)); }
-    pub fn reset()  { VISITS.with(|c| c.set(0)); }
-    pub fn count()  -> usize { VISITS.with(|c| c.get()) }
+    pub fn record() {
+        VISITS.with(|c| c.set(c.get() + 1));
+    }
+    pub fn reset() {
+        VISITS.with(|c| c.set(0));
+    }
+    pub fn count() -> usize {
+        VISITS.with(|c| c.get())
+    }
 }
 
 /// Recursively evaluate a trie node against the current JSON value.
@@ -602,7 +644,10 @@ mod tests {
     use crate::Event;
 
     fn make_event(json: serde_json::Value) -> Event {
-        Event { data: json, metadata: None }
+        Event {
+            data: json,
+            metadata: None,
+        }
     }
 
     // ── Core correctness ──────────────────────────────────────────────────
@@ -655,21 +700,36 @@ mod tests {
         let mut engine = FusedRuleEngine::builder("test")
             .require(Rule::greater_than("price", 0.0))
             .build();
-        assert!(engine.execute(make_event(serde_json::json!({"price": 10.0}))).unwrap().is_some());
-        assert!(engine.execute(make_event(serde_json::json!({"price": -1.0}))).unwrap().is_none());
-        assert!(engine.execute(make_event(serde_json::json!({"price": 0.0}))).unwrap().is_none());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"price": 10.0})))
+            .unwrap()
+            .is_some());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"price": -1.0})))
+            .unwrap()
+            .is_none());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"price": 0.0})))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
     fn test_one_of_rule() {
         let mut engine = FusedRuleEngine::builder("test")
-            .require(Rule::one_of("status", vec![
-                serde_json::json!("active"),
-                serde_json::json!("pending"),
-            ]))
+            .require(Rule::one_of(
+                "status",
+                vec![serde_json::json!("active"), serde_json::json!("pending")],
+            ))
             .build();
-        assert!(engine.execute(make_event(serde_json::json!({"status": "active"}))).unwrap().is_some());
-        assert!(engine.execute(make_event(serde_json::json!({"status": "deleted"}))).unwrap().is_none());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"status": "active"})))
+            .unwrap()
+            .is_some());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"status": "deleted"})))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -677,8 +737,14 @@ mod tests {
         let mut eq_engine = FusedRuleEngine::builder("eq")
             .require(Rule::equals("role", serde_json::json!("admin")))
             .build();
-        assert!(eq_engine.execute(make_event(serde_json::json!({"role": "admin"}))).unwrap().is_some());
-        assert!(eq_engine.execute(make_event(serde_json::json!({"role": "user"}))).unwrap().is_none());
+        assert!(eq_engine
+            .execute(make_event(serde_json::json!({"role": "admin"})))
+            .unwrap()
+            .is_some());
+        assert!(eq_engine
+            .execute(make_event(serde_json::json!({"role": "user"})))
+            .unwrap()
+            .is_none());
     }
 
     // ── Selector deduplication ──────────────────────────────────────────────
@@ -693,7 +759,11 @@ mod tests {
             .build();
 
         assert_eq!(engine.rule_count(), 3);
-        assert_eq!(engine.selector_count(), 1, "3 rules on same field = 1 unique selector");
+        assert_eq!(
+            engine.selector_count(),
+            1,
+            "3 rules on same field = 1 unique selector"
+        );
     }
 
     #[test]
@@ -878,14 +948,18 @@ mod tests {
     #[test]
     fn test_custom_predicate() {
         let mut engine = FusedRuleEngine::builder("custom")
-            .require(Rule::custom(
-                "score",
-                "score must be even",
-                |v| v.as_f64().map(|n| n as i64 % 2 == 0).unwrap_or(false),
-            ))
+            .require(Rule::custom("score", "score must be even", |v| {
+                v.as_f64().map(|n| n as i64 % 2 == 0).unwrap_or(false)
+            }))
             .build();
-        assert!(engine.execute(make_event(serde_json::json!({"score": 4}))).unwrap().is_some());
-        assert!(engine.execute(make_event(serde_json::json!({"score": 3}))).unwrap().is_none());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"score": 4})))
+            .unwrap()
+            .is_some());
+        assert!(engine
+            .execute(make_event(serde_json::json!({"score": 3})))
+            .unwrap()
+            .is_none());
     }
 
     // ── Integration with Pipeline ─────────────────────────────────────────
@@ -954,10 +1028,22 @@ mod tests {
         let good_data = serde_json::json!({"user_id": "u1", "amount": 50.0});
         let bad_data = serde_json::json!({"user_id": "u1", "amount": "not_a_number"});
 
-        let good_e1 = Event { data: good_data.clone(), metadata: None };
-        let good_e2 = Event { data: good_data.clone(), metadata: None };
-        let bad_e1 = Event { data: bad_data.clone(), metadata: None };
-        let bad_e2 = Event { data: bad_data.clone(), metadata: None };
+        let good_e1 = Event {
+            data: good_data.clone(),
+            metadata: None,
+        };
+        let good_e2 = Event {
+            data: good_data.clone(),
+            metadata: None,
+        };
+        let bad_e1 = Event {
+            data: bad_data.clone(),
+            metadata: None,
+        };
+        let bad_e2 = Event {
+            data: bad_data.clone(),
+            metadata: None,
+        };
 
         assert!(trad.process_event(good_e1).unwrap().is_some());
         assert!(fused.process_event(good_e2).unwrap().is_some());
@@ -984,12 +1070,15 @@ mod tests {
 
 #[cfg(test)]
 mod fse_architectural_properties {
-    use super::*;
     use super::trie_instrument;
+    use super::*;
     use crate::Event;
 
     fn ev(json: serde_json::Value) -> Event {
-        Event { data: json, metadata: None }
+        Event {
+            data: json,
+            metadata: None,
+        }
     }
 
     // ── TRIE-VISIT ────────────────────────────────────────────────────────
@@ -1016,9 +1105,14 @@ mod fse_architectural_properties {
             .require(Rule::exists("b"))
             .require(Rule::exists("c"))
             .build();
-        engine.execute(ev(serde_json::json!({"a":1,"b":2,"c":3}))).unwrap();
-        assert_eq!(trie_instrument::count(), 3,
-            "TRIE-VISIT: 3 flat selectors = 3 node visits, not 3×rule_count");
+        engine
+            .execute(ev(serde_json::json!({"a":1,"b":2,"c":3})))
+            .unwrap();
+        assert_eq!(
+            trie_instrument::count(),
+            3,
+            "TRIE-VISIT: 3 flat selectors = 3 node visits, not 3×rule_count"
+        );
     }
 
     #[test]
@@ -1036,10 +1130,15 @@ mod fse_architectural_properties {
             .require(Rule::exists("user.id"))
             .require(Rule::exists("user.name"))
             .build();
-        engine.execute(ev(serde_json::json!({"user":{"id":"x","name":"y"}}))).unwrap();
-        assert_eq!(trie_instrument::count(), 3,
+        engine
+            .execute(ev(serde_json::json!({"user":{"id":"x","name":"y"}})))
+            .unwrap();
+        assert_eq!(
+            trie_instrument::count(),
+            3,
             "TRIE-VISIT: user.id + user.name = 3 node visits (user, id, name) — \
-             'user' traversed once. If 4, the shared prefix was visited twice.");
+             'user' traversed once. If 4, the shared prefix was visited twice."
+        );
     }
 
     #[test]
@@ -1058,10 +1157,15 @@ mod fse_architectural_properties {
             .require(Rule::exists("a.b.c"))
             .require(Rule::exists("a.b.d"))
             .build();
-        engine.execute(ev(serde_json::json!({"a":{"b":{"c":1,"d":2}}}))).unwrap();
-        assert_eq!(trie_instrument::count(), 4,
+        engine
+            .execute(ev(serde_json::json!({"a":{"b":{"c":1,"d":2}}})))
+            .unwrap();
+        assert_eq!(
+            trie_instrument::count(),
+            4,
             "TRIE-VISIT: a.b.c + a.b.d = 4 node visits (a, a.b, a.b.c, a.b.d). \
-             If 6, both 'a' and 'a.b' were visited twice — regression to flat extraction.");
+             If 6, both 'a' and 'a.b' were visited twice — regression to flat extraction."
+        );
     }
 
     #[test]
@@ -1075,10 +1179,17 @@ mod fse_architectural_properties {
             .require(Rule::exists("user.name"))
             .require(Rule::exists("user.email"))
             .build();
-        engine.execute(ev(serde_json::json!({"user":{"id":"x","name":"y","email":"z"}}))).unwrap();
-        assert_eq!(trie_instrument::count(), 4,
+        engine
+            .execute(ev(
+                serde_json::json!({"user":{"id":"x","name":"y","email":"z"}}),
+            ))
+            .unwrap();
+        assert_eq!(
+            trie_instrument::count(),
+            4,
             "TRIE-VISIT: user.id/name/email = 4 node visits (user + 3 children). \
-             If >4, 'user' was accessed more than once — prefix sharing broken.");
+             If >4, 'user' was accessed more than once — prefix sharing broken."
+        );
     }
 
     #[test]
@@ -1097,12 +1208,21 @@ mod fse_architectural_properties {
             .require(Rule::not_equals("amount", serde_json::json!(-1.0)))
             .require(Rule::not_equals("amount", serde_json::json!(42.0)))
             .build();
-        assert_eq!(engine.selector_count(), 1, "DEDUP: 8 rules on 'amount' = 1 unique selector");
+        assert_eq!(
+            engine.selector_count(),
+            1,
+            "DEDUP: 8 rules on 'amount' = 1 unique selector"
+        );
         assert_eq!(engine.rule_count(), 8);
-        engine.execute(ev(serde_json::json!({"amount": 100.0}))).unwrap();
-        assert_eq!(trie_instrument::count(), 1,
+        engine
+            .execute(ev(serde_json::json!({"amount": 100.0})))
+            .unwrap();
+        assert_eq!(
+            trie_instrument::count(),
+            1,
             "TRIE-VISIT: 8 rules on same selector = 1 node visit. \
-             If 8, each rule is extracting the field independently — rule-first regression.");
+             If 8, each rule is extracting the field independently — rule-first regression."
+        );
     }
 
     // ── BROADCAST ─────────────────────────────────────────────────────────
@@ -1129,10 +1249,14 @@ mod fse_architectural_properties {
         let result = engine.execute(ev(serde_json::json!({"amount": -5.0})));
         assert!(result.is_err(), "Both rules fail: event must error");
         let msg = format!("{:?}", result.unwrap_err());
-        assert!(msg.contains("amount must be > 100"),
-            "BROADCAST: R0 violation missing — broadcast did not evaluate all rules");
-        assert!(msg.contains("amount must be < -10"),
-            "BROADCAST: R1 violation missing — broadcast stopped after first failure");
+        assert!(
+            msg.contains("amount must be > 100"),
+            "BROADCAST: R0 violation missing — broadcast did not evaluate all rules"
+        );
+        assert!(
+            msg.contains("amount must be < -10"),
+            "BROADCAST: R1 violation missing — broadcast stopped after first failure"
+        );
     }
 
     #[test]
@@ -1141,9 +1265,9 @@ mod fse_architectural_properties {
         // Only R1's name should appear in the error report.
         // Proves each rule's state is tracked independently in the bitmap.
         let mut engine = FusedRuleEngine::builder("independent_tracking")
-            .require(Rule::greater_than("x", 0.0))      // R0: 5.0 > 0 → pass
-            .require(Rule::less_than("x", 3.0))         // R1: 5.0 < 3 → FAIL
-            .require(Rule::less_than("x", 100.0))       // R2: 5.0 < 100 → pass
+            .require(Rule::greater_than("x", 0.0)) // R0: 5.0 > 0 → pass
+            .require(Rule::less_than("x", 3.0)) // R1: 5.0 < 3 → FAIL
+            .require(Rule::less_than("x", 100.0)) // R2: 5.0 < 100 → pass
             .on_fail(FailAction::Error("E".to_string()))
             .build();
         assert_eq!(engine.selector_count(), 1);
@@ -1151,14 +1275,23 @@ mod fse_architectural_properties {
         let result = engine.execute(ev(serde_json::json!({"x": 5.0})));
         assert!(result.is_err());
         let msg = format!("{:?}", result.unwrap_err());
-        assert!(msg.contains("1 rule(s) failed"),
-            "BROADCAST: exactly 1 rule should fail, got: {}", msg);
-        assert!(msg.contains("x must be < 3"),
-            "BROADCAST: R1 violation missing from report");
-        assert!(!msg.contains("x must be > 0"),
-            "BROADCAST: R0 should not be in failure report (it passed)");
-        assert!(!msg.contains("x must be < 100"),
-            "BROADCAST: R2 should not be in failure report (it passed)");
+        assert!(
+            msg.contains("1 rule(s) failed"),
+            "BROADCAST: exactly 1 rule should fail, got: {}",
+            msg
+        );
+        assert!(
+            msg.contains("x must be < 3"),
+            "BROADCAST: R1 violation missing from report"
+        );
+        assert!(
+            !msg.contains("x must be > 0"),
+            "BROADCAST: R0 should not be in failure report (it passed)"
+        );
+        assert!(
+            !msg.contains("x must be < 100"),
+            "BROADCAST: R2 should not be in failure report (it passed)"
+        );
     }
 
     #[test]
@@ -1180,11 +1313,21 @@ mod fse_architectural_properties {
         assert_eq!(engine.rule_count(), 8);
 
         // score=75 passes 7 rules but fails "must be < 50"
-        assert!(engine.execute(ev(serde_json::json!({"score": 75.0}))).unwrap().is_none(),
-            "BROADCAST: failing rule 8 of 8 must still drop the event");
+        assert!(
+            engine
+                .execute(ev(serde_json::json!({"score": 75.0})))
+                .unwrap()
+                .is_none(),
+            "BROADCAST: failing rule 8 of 8 must still drop the event"
+        );
         // score=25 passes all 8
-        assert!(engine.execute(ev(serde_json::json!({"score": 25.0}))).unwrap().is_some(),
-            "BROADCAST: event satisfying all 8 rules must pass");
+        assert!(
+            engine
+                .execute(ev(serde_json::json!({"score": 25.0})))
+                .unwrap()
+                .is_some(),
+            "BROADCAST: event satisfying all 8 rules must pass"
+        );
     }
 
     // ── DEDUP (compile-time fusion) ───────────────────────────────────────
@@ -1202,9 +1345,12 @@ mod fse_architectural_properties {
             .require(Rule::type_is("amount", FieldType::Number))
             .require(Rule::greater_than("amount", 0.0))
             .build();
-        assert_eq!(engine.rule_count(), 6,  "DEDUP: should have 6 rules");
-        assert_eq!(engine.selector_count(), 2,
-            "DEDUP: 6 rules on 2 unique paths = 2 unique selectors, not 6");
+        assert_eq!(engine.rule_count(), 6, "DEDUP: should have 6 rules");
+        assert_eq!(
+            engine.selector_count(),
+            2,
+            "DEDUP: 6 rules on 2 unique paths = 2 unique selectors, not 6"
+        );
     }
 
     // ── FAIL-CLOSED ───────────────────────────────────────────────────────
@@ -1222,10 +1368,16 @@ mod fse_architectural_properties {
             .build();
 
         let result = engine.execute(ev(serde_json::json!({"other": "value"})));
-        assert!(result.is_err(), "FAIL-CLOSED: missing 'user' parent → all 3 sub-rules fail");
+        assert!(
+            result.is_err(),
+            "FAIL-CLOSED: missing 'user' parent → all 3 sub-rules fail"
+        );
         let msg = format!("{:?}", result.unwrap_err());
-        assert!(msg.contains("3 rule(s) failed"),
-            "FAIL-CLOSED: all 3 rules in missing subtree should fail, got: {}", msg);
+        assert!(
+            msg.contains("3 rule(s) failed"),
+            "FAIL-CLOSED: all 3 rules in missing subtree should fail, got: {}",
+            msg
+        );
     }
 
     #[test]
@@ -1239,8 +1391,10 @@ mod fse_architectural_properties {
             .build();
 
         let result = engine.execute(ev(serde_json::json!({"user": null})));
-        assert!(result.unwrap().is_none(),
-            "FAIL-CLOSED: null parent → child rules fail → event dropped");
+        assert!(
+            result.unwrap().is_none(),
+            "FAIL-CLOSED: null parent → child rules fail → event dropped"
+        );
     }
 
     // ── DETERMINISM ───────────────────────────────────────────────────────
@@ -1251,44 +1405,51 @@ mod fse_architectural_properties {
         // produce identical pass/fail results on every input.
         // This would break if evaluation depended on HashMap iteration order.
         let good = serde_json::json!({"user_id": "u1", "amount": 50.0, "status": "active"});
-        let bad  = serde_json::json!({"user_id": "u1", "amount": -1.0, "status": "active"});
+        let bad = serde_json::json!({"user_id": "u1", "amount": -1.0, "status": "active"});
 
-        let build_order_a = || FusedRuleEngine::builder("order_a")
-            .require(Rule::exists("user_id"))
-            .require(Rule::greater_than("amount", 0.0))
-            .require(Rule::equals("status", serde_json::json!("active")))
-            .on_fail(FailAction::DropEvent)
-            .build();
+        let build_order_a = || {
+            FusedRuleEngine::builder("order_a")
+                .require(Rule::exists("user_id"))
+                .require(Rule::greater_than("amount", 0.0))
+                .require(Rule::equals("status", serde_json::json!("active")))
+                .on_fail(FailAction::DropEvent)
+                .build()
+        };
 
-        let build_order_b = || FusedRuleEngine::builder("order_b")
-            .require(Rule::greater_than("amount", 0.0))
-            .require(Rule::equals("status", serde_json::json!("active")))
-            .require(Rule::exists("user_id"))
-            .on_fail(FailAction::DropEvent)
-            .build();
+        let build_order_b = || {
+            FusedRuleEngine::builder("order_b")
+                .require(Rule::greater_than("amount", 0.0))
+                .require(Rule::equals("status", serde_json::json!("active")))
+                .require(Rule::exists("user_id"))
+                .on_fail(FailAction::DropEvent)
+                .build()
+        };
 
-        let build_order_c = || FusedRuleEngine::builder("order_c")
-            .require(Rule::equals("status", serde_json::json!("active")))
-            .require(Rule::exists("user_id"))
-            .require(Rule::greater_than("amount", 0.0))
-            .on_fail(FailAction::DropEvent)
-            .build();
+        let build_order_c = || {
+            FusedRuleEngine::builder("order_c")
+                .require(Rule::equals("status", serde_json::json!("active")))
+                .require(Rule::exists("user_id"))
+                .require(Rule::greater_than("amount", 0.0))
+                .on_fail(FailAction::DropEvent)
+                .build()
+        };
 
         for order in ["a", "b", "c"] {
             let mut engine = match order {
                 "a" => build_order_a(),
                 "b" => build_order_b(),
-                _   => build_order_c(),
+                _ => build_order_c(),
             };
             assert!(
                 engine.execute(ev(good.clone())).unwrap().is_some(),
-                "DETERMINISM: order={} should pass good event", order
+                "DETERMINISM: order={} should pass good event",
+                order
             );
             assert!(
                 engine.execute(ev(bad.clone())).unwrap().is_none(),
-                "DETERMINISM: order={} should drop bad event (negative amount)", order
+                "DETERMINISM: order={} should drop bad event (negative amount)",
+                order
             );
         }
     }
 }
-

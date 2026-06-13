@@ -1,10 +1,7 @@
-//! # Replay Harness (Testing & Debugging Only)
+//! Execution traces for determinism verification.
 //!
-//! This module provides utilities to record and replay pipeline executions
-//! for testing purposes, ensuring deterministic behavior.
-//!
-//! **Note:** This is not a reprocessing or audit system. It's a confidence
-//! tool for verifying that pipelines behave identically across runs.
+//! Use `record_execution`/`replay_execution` for runtime checks.
+//! Structural specs live in `replay_spec`.
 
 use crate::{Event, Pipeline};
 use anyhow::anyhow;
@@ -14,7 +11,7 @@ use std::path::Path;
 /// Recorded execution trace for replay testing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionTrace {
-    pub input_events: Vec<String>, // Raw JSON strings
+    pub input_events: Vec<String>,             // Raw JSON strings
     pub expected_outputs: Vec<Option<String>>, // None for dropped, Some(json) for output
 }
 
@@ -25,7 +22,10 @@ pub fn record_execution<P: AsRef<Path>>(
     output_path: P,
 ) -> anyhow::Result<()> {
     let mut trace = ExecutionTrace {
-        input_events: input_events.iter().map(|e| serde_json::to_string(&e.data).unwrap()).collect(),
+        input_events: input_events
+            .iter()
+            .map(|e| serde_json::to_string(&e.data).unwrap())
+            .collect(),
         expected_outputs: Vec::new(),
     };
 
@@ -56,7 +56,9 @@ pub fn replay_execution<P: AsRef<Path>>(
         if actual_output_json != *expected_output {
             return Err(anyhow!(
                 "replay mismatch: input={}, expected={:?}, actual={:?}",
-                input_json, expected_output, actual_output_json
+                input_json,
+                expected_output,
+                actual_output_json
             ));
         }
     }
@@ -64,7 +66,7 @@ pub fn replay_execution<P: AsRef<Path>>(
     Ok(())
 }
 
-// ── Replay Manager ────────────────────────────────────────────────────────────
+// Replay Manager (legacy thin structural layer; prefer replay_spec for new code)
 
 /// A minimal specification for a single stage in a replay spec.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -169,7 +171,10 @@ impl ReplayManager {
 
         let mut spec = PipelineReplaySpec::from_stages(stages);
         spec.name = name.to_string();
-        spec.metadata.insert("stage_count".to_string(), pipeline.stage_count().to_string());
+        spec.metadata.insert(
+            "stage_count".to_string(),
+            pipeline.stage_count().to_string(),
+        );
         spec
     }
 
@@ -239,7 +244,7 @@ impl ReplayManager {
     }
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
+// Private helpers
 
 fn diff_specs(a: &PipelineReplaySpec, b: &PipelineReplaySpec) -> SpecComparison {
     use std::collections::HashMap;
@@ -345,7 +350,9 @@ mod replay_manager_tests {
     #[test]
     fn test_generate_replay_report_missing_spec() {
         let manager = ReplayManager::new();
-        assert!(manager.generate_replay_report("baseline", "current").is_err());
+        assert!(manager
+            .generate_replay_report("baseline", "current")
+            .is_err());
     }
 
     #[test]

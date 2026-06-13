@@ -10,8 +10,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut pipeline = Pipeline::new();
 
     // Use temp for hardening
-    let out_path: PathBuf = std::env::temp_dir().join(format!("feedme_dir_combined_{}.ndjson", std::process::id()));
-    let dir_path: PathBuf = std::env::temp_dir().join(format!("feedme_dir_logs_{}", std::process::id()));
+    let out_path: PathBuf =
+        std::env::temp_dir().join(format!("feedme_dir_combined_{}.ndjson", std::process::id()));
+    let dir_path: PathBuf =
+        std::env::temp_dir().join(format!("feedme_dir_logs_{}", std::process::id()));
 
     // No transforms, just output
     pipeline.add_stage(Box::new(FileOutput::new(out_path.clone())));

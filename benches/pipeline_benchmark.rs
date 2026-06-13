@@ -1,19 +1,21 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
-use std::hint::black_box;
-use feedme::{Event, Pipeline, FieldSelect, RequiredFields, StdoutOutput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 #[cfg(feature = "fused")]
-use feedme::fused::{FusedRuleEngine, Rule, FieldType};
+use feedme::fused::{FieldType, FusedRuleEngine, Rule};
+use feedme::{Event, FieldSelect, Pipeline, RequiredFields, StdoutOutput};
+use std::hint::black_box;
 
 fn make_events(n: usize) -> Vec<Event> {
-    (0..n).map(|i| Event {
-        data: serde_json::json!({
-            "timestamp": "2023-10-01T10:00:00Z",
-            "level": if i % 10 == 0 { "error" } else { "info" },
-            "message": format!("Test message {}", i),
-            "user_id": i
-        }),
-        metadata: None,
-    }).collect()
+    (0..n)
+        .map(|i| Event {
+            data: serde_json::json!({
+                "timestamp": "2023-10-01T10:00:00Z",
+                "level": if i % 10 == 0 { "error" } else { "info" },
+                "message": format!("Test message {}", i),
+                "user_id": i
+            }),
+            metadata: None,
+        })
+        .collect()
 }
 
 fn benchmark_pipeline_processing(c: &mut Criterion) {
@@ -38,17 +40,24 @@ fn benchmark_pipeline_processing(c: &mut Criterion) {
         });
 
         // Output sink cost (realistic "bells" usage)
-        group.bench_with_input(BenchmarkId::new("select_required_stdout", size), size, |b, _| {
-            b.iter(|| {
-                let mut pipeline = Pipeline::new();
-                pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
-                pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
-                pipeline.add_stage(Box::new(StdoutOutput::new()));
-                for event in &events {
-                    black_box(pipeline.process_event(event.clone())).ok();
-                }
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("select_required_stdout", size),
+            size,
+            |b, _| {
+                b.iter(|| {
+                    let mut pipeline = Pipeline::new();
+                    pipeline.add_stage(Box::new(FieldSelect::new(vec![
+                        "level".to_string(),
+                        "message".to_string(),
+                    ])));
+                    pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+                    pipeline.add_stage(Box::new(StdoutOutput::new()));
+                    for event in &events {
+                        black_box(pipeline.process_event(event.clone())).ok();
+                    }
+                })
+            },
+        );
     }
 
     #[cfg(feature = "fused")]
@@ -59,7 +68,10 @@ fn benchmark_pipeline_processing(c: &mut Criterion) {
                 let mut engine = FusedRuleEngine::builder("bench")
                     .require(Rule::exists("level"))
                     .require(Rule::type_is("level", FieldType::String))
-                    .require(Rule::one_of("level", vec![serde_json::json!("info"), serde_json::json!("error")]))
+                    .require(Rule::one_of(
+                        "level",
+                        vec![serde_json::json!("info"), serde_json::json!("error")],
+                    ))
                     .on_fail(feedme::fused::FailAction::DropEvent)
                     .build();
                 let mut pipeline = Pipeline::new();

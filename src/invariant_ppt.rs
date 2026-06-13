@@ -13,7 +13,7 @@ struct InvariantRecord {
 
 #[cfg(any(test, feature = "invariant-ppt"))]
 thread_local! {
-    static INVARIANT_LOG: RefCell<Vec<InvariantRecord>> = RefCell::new(Vec::new());
+    static INVARIANT_LOG: RefCell<Vec<InvariantRecord>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Asserts an invariant (a semantic law) and records that it was checked.
@@ -71,7 +71,10 @@ pub fn exercised_invariants() -> BTreeSet<&'static str> {
 
 /// Contract test: returns Err if any expected invariants were not exercised.
 #[cfg(any(test, feature = "invariant-ppt"))]
-pub fn contract_test(contract_name: &str, expected_invariants: &[&'static str]) -> Result<(), String> {
+pub fn contract_test(
+    contract_name: &str,
+    expected_invariants: &[&'static str],
+) -> Result<(), String> {
     let exercised = exercised_invariants();
 
     let missing: Vec<&'static str> = expected_invariants
@@ -242,7 +245,10 @@ pub struct PptManager {
 impl PptManager {
     /// Create a new PPT manager with a 10% regression threshold.
     pub fn new() -> Self {
-        Self { baseline: None, regression_threshold: 0.1 }
+        Self {
+            baseline: None,
+            regression_threshold: 0.1,
+        }
     }
 
     /// Set the performance regression threshold (0.0–1.0).
@@ -259,14 +265,9 @@ impl PptManager {
     /// Compare the pipeline's current metrics against the stored baseline.
     ///
     /// Returns `Err` if no baseline has been established.
-    pub fn check_regression(
-        &self,
-        pipeline: &crate::Pipeline,
-    ) -> Result<RegressionReport, String> {
+    pub fn check_regression(&self, pipeline: &crate::Pipeline) -> Result<RegressionReport, String> {
         let Some(baseline) = &self.baseline else {
-            return Err(
-                "No baseline established. Call establish_baseline() first.".to_string(),
-            );
+            return Err("No baseline established. Call establish_baseline() first.".to_string());
         };
 
         let current = BaselineSnapshot::from(pipeline);
@@ -438,4 +439,3 @@ fn generate_recommendations(status: &PipelineHealthStatus) -> Vec<String> {
 
     recs
 }
-
