@@ -77,5 +77,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         report.passed_checks, report.total_policies * report.passed_checks.max(1)
     );
 
+    // Harden user-surface: assert attestation and compliance
+    assert!(bundle.metrics.total_events_processed == 5);
+    assert!(!bundle.compliance_checks.is_empty());
+
     Ok(())
 }

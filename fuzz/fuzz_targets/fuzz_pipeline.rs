@@ -8,7 +8,11 @@ fuzz_target!(|data: &[u8]| {
     // Convert fuzzer input to string, split by newlines for NDJSON
     if let Ok(input_str) = std::str::from_utf8(data) {
         let mut pipeline = Pipeline::new();
-        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+        pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string(), "email".to_string()])));
+        // Use PII for bells-and-whistles fuzz coverage
+        if let Ok(pii) = regex::Regex::new(r".*@.*") {
+            pipeline.add_stage(Box::new(feedme::PIIRedaction::new(vec![pii])));
+        }
         pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
 
         // Create a cursor from the input data and try to parse as NDJSON

@@ -1,39 +1,77 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::hint::black_box;
-use feedme::{Event, Pipeline, FieldSelect, RequiredFields};
+use feedme::{Event, Pipeline, FieldSelect, RequiredFields, StdoutOutput};
+#[cfg(feature = "fused")]
+use feedme::fused::{FusedRuleEngine, Rule, FieldType};
+
+fn make_events(n: usize) -> Vec<Event> {
+    (0..n).map(|i| Event {
+        data: serde_json::json!({
+            "timestamp": "2023-10-01T10:00:00Z",
+            "level": if i % 10 == 0 { "error" } else { "info" },
+            "message": format!("Test message {}", i),
+            "user_id": i
+        }),
+        metadata: None,
+    }).collect()
+}
 
 fn benchmark_pipeline_processing(c: &mut Criterion) {
-    // Build in-memory test events once; avoid I/O inside the hot loop.
-    let events: Vec<Event> = vec![
-        Event {
-            data: serde_json::json!({"timestamp":"2023-10-01T10:00:00Z","level":"info","message":"Test message 1","user_id":"123"}),
-            metadata: None,
-        },
-        Event {
-            data: serde_json::json!({"timestamp":"2023-10-01T10:01:00Z","level":"error","message":"Test message 2","user_id":"456"}),
-            metadata: None,
-        },
-        Event {
-            data: serde_json::json!({"timestamp":"2023-10-01T10:02:00Z","level":"warn","message":"Test message 3","user_id":"789"}),
-            metadata: None,
-        },
-    ];
+    let mut group = c.benchmark_group("pipeline_scale");
 
-    c.bench_function("pipeline_process_3_events", |b| {
-        b.iter(|| {
-            let mut pipeline = Pipeline::new();
-            pipeline.add_stage(Box::new(FieldSelect::new(vec![
-                "timestamp".to_string(),
-                "level".to_string(),
-                "message".to_string(),
-            ])));
-            pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+    for size in [100, 1000, 10000].iter() {
+        let events = make_events(*size);
 
-            for event in &events {
-                black_box(pipeline.process_event(event.clone())).ok();
-            }
-        })
-    });
+        group.bench_with_input(BenchmarkId::new("select_required", size), size, |b, _| {
+            b.iter(|| {
+                let mut pipeline = Pipeline::new();
+                pipeline.add_stage(Box::new(FieldSelect::new(vec![
+                    "timestamp".to_string(),
+                    "level".to_string(),
+                    "message".to_string(),
+                ])));
+                pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+                for event in &events {
+                    black_box(pipeline.process_event(event.clone())).ok();
+                }
+            })
+        });
+
+        // Output sink cost (realistic "bells" usage)
+        group.bench_with_input(BenchmarkId::new("select_required_stdout", size), size, |b, _| {
+            b.iter(|| {
+                let mut pipeline = Pipeline::new();
+                pipeline.add_stage(Box::new(FieldSelect::new(vec!["level".to_string(), "message".to_string()])));
+                pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+                pipeline.add_stage(Box::new(StdoutOutput::new()));
+                for event in &events {
+                    black_box(pipeline.process_event(event.clone())).ok();
+                }
+            })
+        });
+    }
+
+    #[cfg(feature = "fused")]
+    {
+        let events = make_events(1000);
+        group.bench_function("fused_validation_1000_events", |b| {
+            b.iter(|| {
+                let mut engine = FusedRuleEngine::builder("bench")
+                    .require(Rule::exists("level"))
+                    .require(Rule::type_is("level", FieldType::String))
+                    .require(Rule::one_of("level", vec![serde_json::json!("info"), serde_json::json!("error")]))
+                    .on_fail(feedme::fused::FailAction::DropEvent)
+                    .build();
+                let mut pipeline = Pipeline::new();
+                pipeline.add_stage(Box::new(engine));
+                for event in &events {
+                    black_box(pipeline.process_event(event.clone())).ok();
+                }
+            })
+        });
+    }
+
+    group.finish();
 }
 
 criterion_group!(benches, benchmark_pipeline_processing);
