@@ -537,6 +537,29 @@ impl Stage for FusedRuleEngine {
     }
 }
 
+impl crate::replay_spec::ReplayableStage for FusedRuleEngine {
+    fn stage_id() -> crate::replay_spec::StageId {
+        "fused_rule_engine".to_string()
+    }
+
+    fn stage_version() -> crate::replay_spec::StageVersion {
+        "1.0".to_string()
+    }
+
+    fn to_spec(&self) -> crate::replay_spec::StageSpec {
+        let rule_descs: Vec<String> = self.rules.iter().map(|r| r.name.clone()).collect();
+        crate::replay_spec::StageSpec {
+            stage_id: Self::stage_id(),
+            stage_version: Self::stage_version(),
+            config: serde_json::json!({
+                "name": self.name,
+                "rules": rule_descs,
+                "fail_action": format!("{:?}", self.fail_action)
+            }),
+        }
+    }
+}
+
 // ── Builder ───────────────────────────────────────────────────────────────────
 
 /// Builder for `FusedRuleEngine`.

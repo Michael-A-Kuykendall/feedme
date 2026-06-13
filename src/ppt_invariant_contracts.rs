@@ -417,3 +417,32 @@ fn performance_regression_detection() {
 
     assert!(check_performance_regression("test_pipeline", &regressed, 0.15).is_err());
 }
+
+#[test]
+fn replay_from_pipeline_roundtrip_unified() {
+    use crate::replay_spec::*;
+
+    let mut reg = StageRegistry::new();
+    reg.register_stage("field_select".to_string(), Box::new(|c| {
+        let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
+        Ok(Box::new(FieldSelect::new(fields)))
+    }));
+    reg.register_stage("required_fields".to_string(), Box::new(|c| {
+        let fields: Vec<String> = serde_json::from_value(c["fields"].clone())?;
+        Ok(Box::new(RequiredFields::new(fields)))
+    }));
+    reg.register_stage("stdout_output".to_string(), Box::new(|_c| Ok(Box::new(StdoutOutput::new()))));
+
+    let mut p = Pipeline::new();
+    p.add_stage(Box::new(FieldSelect::new(vec!["level".into(), "message".into()])));
+    p.add_stage(Box::new(RequiredFields::new(vec!["level".into()])));
+    p.add_stage(Box::new(StdoutOutput::new()));
+
+    // Now works thanks to unified from_pipeline + ReplayableStage impls on core stages
+    let spec = PipelineReplaySpec::from_pipeline(&p, &reg).expect("from_pipeline must succeed for replayable stages");
+    assert_eq!(spec.stages.len(), 3);
+
+    let p2 = spec.to_pipeline(&reg).expect("to_pipeline roundtrip");
+    assert_eq!(p2.stage_count(), 3);
+    assert_eq!(p2.stage_names(), vec!["FieldSelect", "RequiredFields", "StdoutOutput"]);
+}
