@@ -1980,6 +1980,17 @@ impl Config {
     }
 }
 
+/// Ergonomic preset for a common "bells and whistles" redact + select + validate pipeline.
+/// Returns a fully replayable pipeline (all stages now implement ReplayableStage).
+/// Fits the "preferred complete pipe" shape: one call brings PII + projection + required without user wiring.
+pub fn common_redact_validate_pipeline(select_fields: Vec<String>, required_fields: Vec<String>, pii_patterns: Vec<regex::Regex>) -> Pipeline {
+    let mut p = Pipeline::new();
+    p.add_stage(Box::new(PIIRedaction::new(pii_patterns)));
+    p.add_stage(Box::new(FieldSelect::new(select_fields)));
+    p.add_stage(Box::new(RequiredFields::new(required_fields)));
+    p
+}
+
 /// Plugins: enable user-defined stages with explicit registration and isolation.
 /// No implicit discovery.
 pub struct PluginRegistry {

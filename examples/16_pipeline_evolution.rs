@@ -128,5 +128,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("v2 outputs ({}):", outputs_v2.len());
     for o in &outputs_v2 { println!("  {}", o); }
 
+    // Phase-3 polish: compose replay (structural diff) + audit (attestation) for attested evolution
+    // Ties bells without new semantics.
+    let mut auditor = feedme::audit::AuditManager::new();
+    auditor.add_compliance_policy(
+        "evolution-quality".into(),
+        feedme::audit::CompliancePolicy {
+            name: "evolution-quality".into(),
+            description: "Processed events reasonable".into(),
+            checks: vec![feedme::audit::ComplianceCheck {
+                name: "min-events".into(),
+                description: "At least 1 event".into(),
+                check_type: feedme::audit::CheckType::MinThroughput,
+                threshold: 1.0,
+            }],
+        },
+    );
+    let _ = auditor.generate_attestation_bundle(&pipe1, "evolution-v1");
+    println!("Composed: replay diff + audit attestation for pipeline evolution.");
+
     Ok(())
 }
