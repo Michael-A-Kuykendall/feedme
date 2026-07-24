@@ -19,3 +19,6 @@ artifacts/
 docs/fused_semantic_execution_full_markdown_reconstruction.md
 .env
 .env.*
+
+# Local bead tracker store (bd)
+.beads/
