@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The easy way: one call gets you a complete pipeline
     let email_pattern = regex::Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")?;
     let ssn_pattern = regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b")?;
-    
+
     let mut pipeline = common_redact_validate_pipeline(
         // Select these fields (others are dropped)
         vec![
@@ -67,9 +67,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("=== Common Pipeline Helper Demo ===\n");
 
-    let mut dl_handler = Some(&mut deadletter as &mut dyn Stage);
     for data in events {
-        let event = Event { data, metadata: None };
+        let event = Event {
+            data,
+            metadata: None,
+        };
         match pipeline.process_event(event) {
             Ok(Some(out)) => {
                 println!("PASSED → {}", out.data);
