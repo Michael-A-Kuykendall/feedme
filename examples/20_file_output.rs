@@ -1,7 +1,7 @@
 /// Example 20 — File Output
 ///
 /// Write processed events to files instead of stdout.
-/// 
+///
 /// - FileOutput: Write to files with buffered I/O for efficiency
 use feedme::*;
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Pipeline that writes to file ────────────────────────────────────────
     let mut pipeline = Pipeline::new();
-    
+
     // Filter out debug level
     pipeline.add_stage(Box::new(Filter::new(Box::new(|ev| {
         ev.data.get("level").and_then(|l| l.as_str()) != Some("debug")
@@ -23,9 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut d = std::collections::HashMap::new();
         d.insert(
             "processed_at".to_string(),
-            Box::new(|_ev: &feedme::Event| {
-                serde_json::json!("2026-06-13T10:00:00Z")
-            }) as feedme::EventDerivationFn,
+            Box::new(|_ev: &feedme::Event| serde_json::json!("2026-06-13T10:00:00Z"))
+                as feedme::EventDerivationFn,
         );
         d
     })));
@@ -40,7 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     input.process_input(&mut pipeline, &mut None)?;
 
     println!("Processed {} events", pipeline.events_processed());
-    println!("Dropped {} events (debug level filtered)", pipeline.events_dropped());
+    println!(
+        "Dropped {} events (debug level filtered)",
+        pipeline.events_dropped()
+    );
 
     // Show what was written to the file
     println!("\n--- Output file contents ---");

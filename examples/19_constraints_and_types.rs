@@ -1,7 +1,7 @@
 /// Example 19 — Type Checking & Value Constraints
 ///
 /// Validate field types and apply custom constraint logic.
-/// 
+///
 /// - TypeChecking: Ensure fields have the expected JSON type
 /// - ValueConstraints: Apply arbitrary predicates to field values
 use feedme::*;
@@ -23,17 +23,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Stage 2: ValueConstraints — custom validation logic
     pipeline.add_stage(Box::new(ValueConstraints::new(HashMap::from([
         // user_id must be non-empty
-        ("user_id".to_string(), Box::new(|v: &serde_json::Value| {
-            v.as_str().map(|s| !s.is_empty()).unwrap_or(false)
-        }) as feedme::ValueConstraintFn),
+        (
+            "user_id".to_string(),
+            Box::new(|v: &serde_json::Value| v.as_str().map(|s| !s.is_empty()).unwrap_or(false))
+                as feedme::ValueConstraintFn,
+        ),
         // age must be positive and under 150
-        ("age".to_string(), Box::new(|v: &serde_json::Value| {
-            v.as_f64().map(|a| a > 0.0 && a < 150.0).unwrap_or(false)
-        }) as feedme::ValueConstraintFn),
+        (
+            "age".to_string(),
+            Box::new(|v: &serde_json::Value| {
+                v.as_f64().map(|a| a > 0.0 && a < 150.0).unwrap_or(false)
+            }) as feedme::ValueConstraintFn,
+        ),
         // tags must have at least one element
-        ("tags".to_string(), Box::new(|v: &serde_json::Value| {
-            v.as_array().map(|a| !a.is_empty()).unwrap_or(false)
-        }) as feedme::ValueConstraintFn),
+        (
+            "tags".to_string(),
+            Box::new(|v: &serde_json::Value| v.as_array().map(|a| !a.is_empty()).unwrap_or(false))
+                as feedme::ValueConstraintFn,
+        ),
     ]))));
 
     // Stage 3: Output
@@ -78,18 +85,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Type Checking & Value Constraints Demo ===\n");
 
     for (i, data) in test_cases.into_iter().enumerate() {
-        let event = Event { data, metadata: None };
+        let event = Event {
+            data,
+            metadata: None,
+        };
         let result = pipeline.process_event(event);
-        
+
         match &result {
             Ok(Some(out)) => println!("[{}] ✓ PASSED → {}", i + 1, out.data),
-            Ok(None) =>    println!("[{}] ✗ REJECTED (type or constraint failed)", i + 1),
-            Err(e) =>      println!("[{}] ERROR: {}", i + 1, e),
+            Ok(None) => println!("[{}] ✗ REJECTED (type or constraint failed)", i + 1),
+            Err(e) => println!("[{}] ERROR: {}", i + 1, e),
         }
     }
 
     println!("\n--- Validation Layers ---");
-    println!("1. TypeChecking: Ensures field has correct JSON type (string/number/boolean/array/object)");
+    println!(
+        "1. TypeChecking: Ensures field has correct JSON type (string/number/boolean/array/object)"
+    );
     println!("2. ValueConstraints: Arbitrary predicates — any logic you can express in Rust");
 
     Ok(())
