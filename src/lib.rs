@@ -21,7 +21,12 @@
 //! - Events are processed strictly in input order
 //! - Memory usage is bounded and input-size independent
 //! - Stages cannot observe shared or mutated state
-//! - Validation failures cannot be silently ignored
+//! - Validation failures are not silently ignored: any Validator stage
+//!   (RequiredFields, TypeChecking, ValueConstraints) rejects invalid events.
+//!   This is an opt-in guarantee — it holds only when such a stage is present.
+//!   Call `Pipeline::require_validation(true)` to enforce it fail-closed: if no
+//!   Validator stage is present, `process_event` returns an error instead of
+//!   silently passing invalid events through.
 //! - Metrics collection cannot influence execution
 //!
 //! ## Example
@@ -1732,6 +1737,29 @@ mod tests {
         let first = stage.execute(event).unwrap().unwrap();
         let second = stage.execute(first).unwrap().unwrap();
         assert_eq!(second.get_string("ssn"), Some("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_require_validation_fails_closed_without_validator() {
+        let mut pipeline = Pipeline::new().require_validation(true);
+        let event = Event {
+            data: serde_json::json!({"level": "info"}),
+            metadata: None,
+        };
+        let err = pipeline.process_event(event).unwrap_err();
+        assert_eq!(err.category(), "System");
+        assert!(err.message().contains("no Validator stage"));
+    }
+
+    #[test]
+    fn test_require_validation_passes_with_validator() {
+        let mut pipeline = Pipeline::new().require_validation(true);
+        pipeline.add_stage(Box::new(RequiredFields::new(vec!["level".to_string()])));
+        let event = Event {
+            data: serde_json::json!({"level": "info"}),
+            metadata: None,
+        };
+        assert!(pipeline.process_event(event).unwrap().is_some());
     }
 
     #[test]

@@ -354,6 +354,10 @@ impl Stage for RequiredFields {
         "RequiredFields"
     }
 
+    fn is_validator(&self) -> bool {
+        true
+    }
+
     fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
         Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
     }
@@ -423,6 +427,10 @@ impl Stage for TypeChecking {
     fn name(&self) -> &str {
         "TypeChecking"
     }
+
+    fn is_validator(&self) -> bool {
+        true
+    }
 }
 
 impl Validator for TypeChecking {}
@@ -477,6 +485,10 @@ impl Stage for ValueConstraints {
 
     fn name(&self) -> &str {
         "ValueConstraints"
+    }
+
+    fn is_validator(&self) -> bool {
+        true
     }
 }
 

@@ -55,7 +55,11 @@ FeedMe provides these mechanical guarantees:
 - Events are processed strictly in input order
 - Memory usage is bounded and input-size independent
 - Stages cannot observe shared or mutated state
-- Validation failures cannot be silently ignored
+- Validation failures are not silently ignored: any Validator stage (RequiredFields,
+  TypeChecking, ValueConstraints) rejects invalid events. This is opt-in — it holds
+  only when such a stage is present. Call `Pipeline::require_validation(true)` to
+  enforce it fail-closed: with no Validator stage, `process_event` returns an error
+  instead of silently passing invalid events through.
 - Metrics collection cannot influence execution
 
 ## Why FeedMe is Not X
