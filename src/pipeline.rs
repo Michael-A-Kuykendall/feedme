@@ -1,4 +1,4 @@
-use crate::error::PipelineError;
+use crate::error::{PipelineError, SystemError, SystemErrorCode};
 use crate::event::Event;
 #[cfg(any(test, feature = "invariant-ppt"))]
 use crate::invariant_ppt;
@@ -28,6 +28,12 @@ pub trait Stage {
     fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
         None
     }
+    /// Whether this stage enforces validation by rejecting invalid events.
+    /// Validator stages (RequiredFields, TypeChecking, ValueConstraints) override
+    /// this to `true`. Used by `Pipeline::require_validation` to fail closed.
+    fn is_validator(&self) -> bool {
+        false
+    }
 }
 
 /// Pipeline: linear, deterministic execution of stages.
@@ -35,6 +41,9 @@ pub trait Stage {
 pub struct Pipeline {
     pub(crate) stages: Vec<Box<dyn Stage>>,
     metrics: Metrics,
+    /// When true, `process_event` fails closed unless the pipeline contains at
+    /// least one Validator stage (RequiredFields, TypeChecking, ValueConstraints).
+    require_validation: bool,
 }
 
 impl Pipeline {
@@ -42,6 +51,7 @@ impl Pipeline {
         Pipeline {
             stages: Vec::new(),
             metrics: Metrics::new(),
+            require_validation: false,
         }
     }
 
@@ -49,7 +59,29 @@ impl Pipeline {
         self.stages.push(stage);
     }
 
+    /// Require that the pipeline contain at least one Validator stage
+    /// (RequiredFields, TypeChecking, or ValueConstraints). When enabled and no
+    /// such stage is present, `process_event` fails closed with a clear error,
+    /// so "validation failures cannot be silently ignored" becomes an enforced
+    /// guarantee rather than an opt-in one. Defaults to `false` to preserve
+    /// backward compatibility.
+    pub fn require_validation(mut self, on: bool) -> Self {
+        self.require_validation = on;
+        self
+    }
+
     pub fn process_event(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
+        if self.require_validation && !self.stages.iter().any(|s| s.is_validator()) {
+            return Err(PipelineError::System(SystemError {
+                stage: "Pipeline".to_string(),
+                code: SystemErrorCode::InvalidConfig,
+                message:
+                    "require_validation is enabled but the pipeline contains no Validator stage \
+                    (RequiredFields, TypeChecking, or ValueConstraints)"
+                        .to_string(),
+            }));
+        }
+
         #[cfg(feature = "invariant-ppt")]
         let prev_processed = self.metrics.events_processed;
         #[cfg(feature = "invariant-ppt")]
