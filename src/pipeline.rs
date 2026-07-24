@@ -1,12 +1,18 @@
 use crate::error::PipelineError;
 use crate::event::Event;
+#[cfg(any(test, feature = "invariant-ppt"))]
 use crate::invariant_ppt;
 use crate::metrics::{DropReason, Metrics};
 use crate::replay_spec;
+#[cfg(feature = "invariant-ppt")]
 use crate::INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE;
+#[cfg(feature = "invariant-ppt")]
 use crate::INVARIANT_ERRORS_INCREMENT_ON_ERROR;
+#[cfg(feature = "invariant-ppt")]
 use crate::INVARIANT_LATENCY_RECORDED_ON_SUCCESS;
+#[cfg(feature = "invariant-ppt")]
 use crate::INVARIANT_OUTPUT_NONE_NOT_DROPPED;
+#[cfg(feature = "invariant-ppt")]
 use crate::INVARIANT_PROCESSED_INCREMENTS_ONCE;
 use std::time::Instant;
 /// Stage contract: ownership-based execution.
@@ -44,11 +50,15 @@ impl Pipeline {
     }
 
     pub fn process_event(&mut self, event: Event) -> Result<Option<Event>, PipelineError> {
+        #[cfg(feature = "invariant-ppt")]
         let prev_processed = self.metrics.events_processed;
+        #[cfg(feature = "invariant-ppt")]
         let prev_errors = self.metrics.errors;
+        #[cfg(feature = "invariant-ppt")]
         let prev_dropped = self.metrics.events_dropped;
 
         self.metrics.increment_processed();
+        #[cfg(feature = "invariant-ppt")]
         invariant_ppt::assert_invariant(
             self.metrics.events_processed == prev_processed + 1,
             INVARIANT_PROCESSED_INCREMENTS_ONCE,
@@ -63,6 +73,7 @@ impl Pipeline {
                     Ok(opt) => {
                         let duration = start.elapsed().as_secs_f64() * 1000.0;
 
+                        #[cfg(feature = "invariant-ppt")]
                         let prev_stage_count = self
                             .metrics
                             .stage_latencies
@@ -70,12 +81,14 @@ impl Pipeline {
                             .map(|s| s.count)
                             .unwrap_or(0);
                         self.metrics.record_latency(stage.name(), duration);
+                        #[cfg(feature = "invariant-ppt")]
                         let new_stage_count = self
                             .metrics
                             .stage_latencies
                             .get(stage.name())
                             .map(|s| s.count)
                             .unwrap_or(0);
+                        #[cfg(feature = "invariant-ppt")]
                         invariant_ppt::assert_invariant(
                             new_stage_count == prev_stage_count + 1,
                             INVARIANT_LATENCY_RECORDED_ON_SUCCESS,
@@ -85,7 +98,9 @@ impl Pipeline {
                         current = opt;
                         if current.is_none() {
                             if !stage.is_output() {
+                                #[cfg(feature = "invariant-ppt")]
                                 let dropped_before = self.metrics.events_dropped;
+                                #[cfg(feature = "invariant-ppt")]
                                 let reason_before = *self
                                     .metrics
                                     .drop_reasons
@@ -94,12 +109,14 @@ impl Pipeline {
 
                                 self.metrics.increment_dropped(DropReason::Filtered);
 
+                                #[cfg(feature = "invariant-ppt")]
                                 let reason_after = *self
                                     .metrics
                                     .drop_reasons
                                     .get(&DropReason::Filtered)
                                     .unwrap_or(&0);
 
+                                #[cfg(feature = "invariant-ppt")]
                                 invariant_ppt::assert_invariant(
                                     self.metrics.events_dropped == dropped_before + 1
                                         && reason_after == reason_before + 1,
@@ -107,6 +124,7 @@ impl Pipeline {
                                     Some("Pipeline::process_event"),
                                 );
                             } else {
+                                #[cfg(feature = "invariant-ppt")]
                                 invariant_ppt::assert_invariant(
                                     self.metrics.events_dropped == prev_dropped,
                                     INVARIANT_OUTPUT_NONE_NOT_DROPPED,
@@ -117,6 +135,7 @@ impl Pipeline {
                     }
                     Err(e) => {
                         self.metrics.increment_errors();
+                        #[cfg(feature = "invariant-ppt")]
                         invariant_ppt::assert_invariant(
                             self.metrics.errors == prev_errors + 1,
                             INVARIANT_ERRORS_INCREMENT_ON_ERROR,
@@ -131,6 +150,7 @@ impl Pipeline {
         }
 
         // Sanity: these counters should never run backward.
+        #[cfg(feature = "invariant-ppt")]
         invariant_ppt::assert_invariant(
             self.metrics.events_processed >= prev_processed
                 && self.metrics.errors >= prev_errors

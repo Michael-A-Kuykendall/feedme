@@ -36,12 +36,18 @@ sha2 = "0.10"
 clap = { version = "4", features = ["derive"] }
 
 [features]
-# Enables PPT-style runtime invariant logging + contract checks.
-# CI runs with `--all-features`, so this stays enforced without affecting default release builds.
+# Default feature set: the invariant-ppt and fused engines are compiled in by
+# default, but can be excluded with `--no-default-features`.
+default = ["fused", "invariant-ppt"]
+
+# Enables PPT-style runtime invariant logging + contract checks. Gated: the
+# `invariant_ppt` module is only compiled when this feature (or `test`) is active,
+# so `cargo build --no-default-features` excludes it with zero overhead.
 invariant-ppt = []
 
 # Enables the fused rule evaluation engine: selector deduplication,
 # single-pass multi-rule evaluation, and early-exit via rule-state bitmap.
+# Gated: `pub mod fused;` is compiled only with this feature.
 fused = []
 
 [dev-dependencies]
@@ -115,6 +121,7 @@ path = "examples/16_pipeline_evolution.rs"
 [[example]]
 name = "17_fused_rule_engine"
 path = "examples/17_fused_rule_engine.rs"
+required-features = ["fused"]
 
 [[example]]
 name = "18_derived_and_remap"
