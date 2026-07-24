@@ -22,3 +22,6 @@ docs/fused_semantic_execution_full_markdown_reconstruction.md
 
 # Local bead tracker store (bd)
 .beads/
+
+# OpenCode export artifacts (resume aids, not source)
+opencode-session-*.md
