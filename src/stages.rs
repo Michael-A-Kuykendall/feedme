@@ -121,23 +121,45 @@ impl replay_spec::ReplayableStage for FieldRemap {
 
 pub struct PIIRedaction {
     patterns: Vec<Regex>,
+    /// Optional allow-list of top-level field names to redact.
+    /// `None` means every string leaf is scanned (backward-compatible default).
+    fields: Option<Vec<String>>,
 }
 
 impl PIIRedaction {
+    /// Create a redactor that scans every string field (backward compatible).
     pub fn new(patterns: Vec<Regex>) -> Self {
-        PIIRedaction { patterns }
+        PIIRedaction {
+            patterns,
+            fields: None,
+        }
+    }
+
+    /// Create a redactor restricted to the given top-level field names.
+    pub fn new_with_fields(patterns: Vec<Regex>, fields: Vec<String>) -> Self {
+        PIIRedaction {
+            patterns,
+            fields: Some(fields),
+        }
+    }
+
+    /// Builder: restrict redaction to the given top-level field names.
+    pub fn with_fields(mut self, fields: Vec<String>) -> Self {
+        self.fields = Some(fields);
+        self
     }
 }
 
 impl Stage for PIIRedaction {
     fn execute(&mut self, mut event: Event) -> Result<Option<Event>, PipelineError> {
         if let serde_json::Value::Object(ref mut map) = event.data {
-            for (_, value) in map.iter_mut() {
-                if let serde_json::Value::String(ref mut s) = value {
-                    for pattern in &self.patterns {
-                        *s = pattern.replace_all(s, "[REDACTED]").to_string();
+            for (key, value) in map.iter_mut() {
+                if let Some(fields) = &self.fields {
+                    if !fields.contains(key) {
+                        continue;
                     }
                 }
+                redact_value(value, &self.patterns);
             }
         }
         Ok(Some(event))
@@ -145,6 +167,31 @@ impl Stage for PIIRedaction {
 
     fn name(&self) -> &str {
         "PIIRedaction"
+    }
+}
+
+/// Recursively redact every string leaf in `value`, skipping values that are
+/// already the literal `"[REDACTED]"` token so redaction is idempotent.
+fn redact_value(value: &mut serde_json::Value, patterns: &[Regex]) {
+    match value {
+        serde_json::Value::String(s) => {
+            if s != "[REDACTED]" {
+                for pattern in patterns {
+                    *s = pattern.replace_all(s, "[REDACTED]").to_string();
+                }
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (_, v) in map.iter_mut() {
+                redact_value(v, patterns);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                redact_value(v, patterns);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -169,7 +216,8 @@ impl replay_spec::ReplayableStage for PIIRedaction {
             stage_id: Self::stage_id(),
             stage_version: Self::stage_version(),
             config: serde_json::json!({
-                "patterns": patterns
+                "patterns": patterns,
+                "fields": self.fields
             }),
         }
     }

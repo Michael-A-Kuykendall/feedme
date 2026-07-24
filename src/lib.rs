@@ -1673,6 +1673,68 @@ mod tests {
     }
 
     #[test]
+    fn test_pii_redaction_field_targeting() {
+        let patterns = vec![regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap()];
+        let mut stage = PIIRedaction::new(patterns.clone()).with_fields(vec!["ssn".to_string()]);
+        let event = Event {
+            data: serde_json::json!({"ssn": "123-45-6789", "note": "call 123-45-6789"}),
+            metadata: None,
+        };
+        let result = stage.execute(event.clone()).unwrap().unwrap();
+        assert_eq!(result.get_string("ssn"), Some("[REDACTED]"));
+        assert_eq!(result.get_string("note"), Some("call 123-45-6789"));
+
+        let mut all_fields = PIIRedaction::new(patterns);
+        let result = all_fields.execute(event).unwrap().unwrap();
+        assert_eq!(result.get_string("note"), Some("call [REDACTED]"));
+    }
+
+    #[test]
+    fn test_pii_redaction_nested_values() {
+        let patterns = vec![regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap()];
+        let mut stage = PIIRedaction::new(patterns);
+        let event = Event {
+            data: serde_json::json!({
+                "user": {"ssn": "123-45-6789"},
+                "contacts": [{"email_ssn": "999-99-9999"}]
+            }),
+            metadata: None,
+        };
+        let result = stage.execute(event).unwrap().unwrap();
+        assert_eq!(result.get_string("user"), None);
+        assert_eq!(
+            result
+                .data
+                .get("user")
+                .and_then(|v| v.get("ssn"))
+                .and_then(|v| v.as_str()),
+            Some("[REDACTED]")
+        );
+        assert_eq!(
+            result
+                .data
+                .get("contacts")
+                .and_then(|v| v.get(0))
+                .and_then(|v| v.get("email_ssn"))
+                .and_then(|v| v.as_str()),
+            Some("[REDACTED]")
+        );
+    }
+
+    #[test]
+    fn test_pii_redaction_idempotent() {
+        let patterns = vec![regex::Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap()];
+        let mut stage = PIIRedaction::new(patterns);
+        let event = Event {
+            data: serde_json::json!({"ssn": "123-45-6789"}),
+            metadata: None,
+        };
+        let first = stage.execute(event).unwrap().unwrap();
+        let second = stage.execute(first).unwrap().unwrap();
+        assert_eq!(second.get_string("ssn"), Some("[REDACTED]"));
+    }
+
+    #[test]
     fn test_pii_redaction_non_object() {
         let mut stage = PIIRedaction::new(vec![regex::Regex::new(r"\d{3}-\d{2}-\d{4}").unwrap()]);
 
