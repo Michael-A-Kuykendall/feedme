@@ -306,6 +306,10 @@ pub mod replay_spec {
     }
 }
 
+// The invariant_ppt module is gated so it is excluded from `--no-default-features`
+// release builds; it stays active under `test` (matching its own `any(test, feature)`
+// design) so contract/invariant tests still run without the feature enabled.
+#[cfg(any(test, feature = "invariant-ppt"))]
 pub mod invariant_ppt;
 
 #[cfg(test)]
@@ -313,20 +317,28 @@ mod ppt_invariant_contracts;
 
 pub mod replay;
 
+// The fused rule engine is gated by the `fused` feature; the example that uses it
+// declares `required-features = ["fused"]` so default/no-default builds stay clean.
+#[cfg(feature = "fused")]
 pub mod fused;
 
 pub mod fault_injection;
 
 pub mod audit;
 
+#[cfg(feature = "invariant-ppt")]
 pub(crate) const INVARIANT_PROCESSED_INCREMENTS_ONCE: &str =
     "processed increments exactly once per process_event";
+#[cfg(feature = "invariant-ppt")]
 pub(crate) const INVARIANT_ERRORS_INCREMENT_ON_ERROR: &str =
     "errors increment exactly once per error";
+#[cfg(feature = "invariant-ppt")]
 pub(crate) const INVARIANT_DROPPED_ONLY_FOR_NON_OUTPUT_NONE: &str =
     "dropped increments only when non-output stage returns None";
+#[cfg(feature = "invariant-ppt")]
 pub(crate) const INVARIANT_OUTPUT_NONE_NOT_DROPPED: &str =
     "output stage returning None does not count as dropped";
+#[cfg(feature = "invariant-ppt")]
 pub(crate) const INVARIANT_LATENCY_RECORDED_ON_SUCCESS: &str =
     "latency is recorded for each successful stage execution";
 
