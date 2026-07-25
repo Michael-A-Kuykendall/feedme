@@ -394,7 +394,7 @@ impl FusedProgram {
 mod trie_instrument {
     use std::cell::Cell;
     thread_local! {
-        static VISITS: Cell<usize> = Cell::new(0);
+        static VISITS: Cell<usize> = const { Cell::new(0) };
     }
     pub fn record() {
         VISITS.with(|c| c.set(c.get() + 1));

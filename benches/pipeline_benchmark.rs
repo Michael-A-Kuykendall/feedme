@@ -65,7 +65,7 @@ fn benchmark_pipeline_processing(c: &mut Criterion) {
         let events = make_events(1000);
         group.bench_function("fused_validation_1000_events", |b| {
             b.iter(|| {
-                let mut engine = FusedRuleEngine::builder("bench")
+                let engine = FusedRuleEngine::builder("bench")
                     .require(Rule::exists("level"))
                     .require(Rule::type_is("level", FieldType::String))
                     .require(Rule::one_of(

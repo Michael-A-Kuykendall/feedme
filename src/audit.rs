@@ -90,7 +90,7 @@ impl AuditManager {
     ) -> Result<AttestationBundle, String> {
         let metrics = AuditMetricsSnapshot::from_pipeline(pipeline);
         #[cfg(any(test, feature = "invariant-ppt"))]
-        let health_issues = crate::invariant_ppt::analyze_pipeline_composition(pipeline);
+        let health_issues = crate::invariants::analyze_pipeline_composition(pipeline);
         #[cfg(not(any(test, feature = "invariant-ppt")))]
         let health_issues: Vec<String> = Vec::new();
         let compliance_checks = self.run_compliance_checks(&metrics);

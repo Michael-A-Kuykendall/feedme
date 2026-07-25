@@ -62,7 +62,7 @@ jobs:
         fail_ci_if_error: true
 
     - name: 🔍 Run clippy
-      run: cargo clippy --all-features -- -D warnings
+      run: cargo clippy --all-features --all-targets -- -D warnings
 
     - name: 🎨 Check formatting
       run: cargo fmt -- --check
@@ -132,7 +132,7 @@ jobs:
     - name: 📋 Generate release notes
       if: success()
       run: |
-        echo "## 🦀 CrabCamera Release Ready" >> $GITHUB_STEP_SUMMARY
+        echo "## 🦀 FeedMe Release Ready" >> $GITHUB_STEP_SUMMARY
         echo "✅ All tests passing" >> $GITHUB_STEP_SUMMARY  
         echo "✅ Coverage ≥ 80%" >> $GITHUB_STEP_SUMMARY
         echo "✅ Security audit clean" >> $GITHUB_STEP_SUMMARY

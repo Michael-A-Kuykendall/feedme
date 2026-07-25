@@ -1,4 +1,4 @@
-use crate::invariant_ppt;
+use crate::invariants;
 use crate::replay_spec::ReplayableStage;
 use crate::{
     Event, FieldSelect, Filter, InputSource, Pipeline, PipelineError, RequiredFields, Stage,
@@ -47,7 +47,7 @@ impl Stage for OutputSink {
 
 #[test]
 fn contract_pipeline_metrics_laws_exercised() {
-    invariant_ppt::clear_invariant_log();
+    invariants::clear_invariant_log();
 
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(Passthrough));
@@ -58,7 +58,7 @@ fn contract_pipeline_metrics_laws_exercised() {
         .process_event(event)
         .expect("Pipeline processing failed"); // Result ignored for invariant testing
 
-    assert!(invariant_ppt::contract_test(
+    assert!(invariants::contract_test(
         "pipeline metrics laws",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
@@ -71,7 +71,7 @@ fn contract_pipeline_metrics_laws_exercised() {
 #[test]
 fn contract_drop_only_counts_for_non_output_stage() {
     // Non-output stage returning None must count as dropped.
-    invariant_ppt::clear_invariant_log();
+    invariants::clear_invariant_log();
 
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(Dropper));
@@ -83,7 +83,7 @@ fn contract_drop_only_counts_for_non_output_stage() {
         .expect("Pipeline processing failed");
     assert!(out.is_none());
 
-    assert!(invariant_ppt::contract_test(
+    assert!(invariants::contract_test(
         "drop counts",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
@@ -93,7 +93,7 @@ fn contract_drop_only_counts_for_non_output_stage() {
     .is_ok());
 
     // Output stage returning None must NOT count as dropped.
-    invariant_ppt::clear_invariant_log();
+    invariants::clear_invariant_log();
 
     let mut pipeline = Pipeline::new();
     pipeline.add_stage(Box::new(OutputSink));
@@ -106,7 +106,7 @@ fn contract_drop_only_counts_for_non_output_stage() {
     assert!(out.is_none());
 
     // This invariant is checked in the core logic, and this contract ensures the check executes.
-    assert!(invariant_ppt::contract_test(
+    assert!(invariants::contract_test(
         "output consumption",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
@@ -185,7 +185,7 @@ fn contract_directory_determinism() {
 #[test]
 fn contract_no_output_after_drop() {
     // Once a stage returns None, no subsequent stages execute for that event
-    invariant_ppt::clear_invariant_log();
+    invariants::clear_invariant_log();
 
     let mut pipeline = Pipeline::new();
     // Add a stage that drops, then a stage that would fail if executed
@@ -201,7 +201,7 @@ fn contract_no_output_after_drop() {
 
     // If RequiredFields executed, it would have failed, but it didn't
     // This contract ensures the drop short-circuits execution
-    assert!(invariant_ppt::contract_test(
+    assert!(invariants::contract_test(
         "no output after drop",
         &[
             crate::INVARIANT_PROCESSED_INCREMENTS_ONCE,
@@ -384,20 +384,20 @@ fn stage_registry_functionality() {
 fn pipeline_composition_analysis() {
     // Test empty pipeline detection
     let empty_pipeline = Pipeline::new();
-    let issues = invariant_ppt::analyze_pipeline_composition(&empty_pipeline);
+    let issues = invariants::analyze_pipeline_composition(&empty_pipeline);
     assert!(issues.iter().any(|i| i.contains("no stages")));
 
     // Test healthy pipeline
     let mut healthy_pipeline = Pipeline::new();
     healthy_pipeline.add_stage(Box::new(Passthrough));
     healthy_pipeline.add_stage(Box::new(StdoutOutput::new()));
-    let issues = invariant_ppt::analyze_pipeline_composition(&healthy_pipeline);
+    let issues = invariants::analyze_pipeline_composition(&healthy_pipeline);
     assert!(issues.is_empty());
 
     // Test pipeline with no output
     let mut no_output_pipeline = Pipeline::new();
     no_output_pipeline.add_stage(Box::new(Passthrough));
-    let issues = invariant_ppt::analyze_pipeline_composition(&no_output_pipeline);
+    let issues = invariants::analyze_pipeline_composition(&no_output_pipeline);
     assert!(issues.iter().any(|i| i.contains("no output stages")));
 }
 
@@ -412,7 +412,7 @@ fn pipeline_health_check() {
     let _ = pipeline.process_event(event.clone());
     let _ = pipeline.process_event(event);
 
-    let health = invariant_ppt::pipeline_health_check(&pipeline);
+    let health = invariants::pipeline_health_check(&pipeline);
     assert!(health.is_healthy);
     assert_eq!(health.stage_count, 2);
     assert_eq!(health.total_processed, 2);
@@ -421,7 +421,7 @@ fn pipeline_health_check() {
 
 #[test]
 fn performance_regression_detection() {
-    use invariant_ppt::{check_performance_regression, PipelineMetrics};
+    use invariants::{check_performance_regression, PipelineMetrics};
 
     let baseline = PipelineMetrics {
         stage_count: 2,
@@ -432,7 +432,7 @@ fn performance_regression_detection() {
     };
 
     // Establish baseline
-    invariant_ppt::record_pipeline_metrics("test_pipeline", baseline.clone());
+    invariants::record_pipeline_metrics("test_pipeline", baseline.clone());
 
     // Test with improved performance (should pass)
     let improved = PipelineMetrics {

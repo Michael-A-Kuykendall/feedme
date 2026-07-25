@@ -41,7 +41,7 @@ clap = { version = "4", features = ["derive"] }
 default = ["fused", "invariant-ppt"]
 
 # Enables PPT-style runtime invariant logging + contract checks. Gated: the
-# `invariant_ppt` module is only compiled when this feature (or `test`) is active,
+# `invariants` module is only compiled when this feature (or `test`) is active,
 # so `cargo build --no-default-features` excludes it with zero overhead.
 invariant-ppt = []
 
