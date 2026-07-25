@@ -1,6 +1,6 @@
 # FeedMe Invariants (Non-Negotiable)
 
-These are the behavioral guarantees that FeedMe **enforces mechanically**. They are not promises—they are tested invariants that cannot be broken without failing the test suite.
+These are the behavioral guarantees that FeedMe **checks mechanically** via runtime assertions and contract tests. They are not proofs of impossibility—they are tested invariants: any break is *caught* by the test suite, not made impossible. Treat them as strong, verified guardrails, not guarantees that failure cannot occur.
 
 ## Core Processing Invariants
 

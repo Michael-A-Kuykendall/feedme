@@ -75,7 +75,9 @@ FeedMe runs in a single process with no networking or cluster management.
 Stages are deterministic: same input + config → same output. No hidden state or concurrency.
 
 ### Not Async-First (like many modern Rust libraries)
-Processing is synchronous by default. Async is an implementation detail for I/O stages.
+The processing core is synchronous by design — and that is a feature, not a
+limitation. Async is reserved exclusively for I/O edge adapters (sources/sinks);
+it never enters the stage loop (see [Scope and Limits](#-scope-and-limits)).
 
 ### Not a DSL (like Logstash)
 No embedded languages or required config files. Code-first with optional YAML support.
@@ -292,29 +294,45 @@ See [src/invariant_contracts.rs](src/invariant_contracts.rs) for the complete co
 
 ## 🚫 Non-Goals
 
-- Distributed processing
-- Network I/O (except stubbed HTTP_Post)
+- Distributed processing (no clustering, remote offsets, or coordination in the core)
 - Persistent storage
 - Query languages
 - Compression or encryption
+- Relational aggregation / joins (that is the job of a saturation-fabric engine
+  such as `dzero-cas` / `mikedb`)
+
+Async I/O at the edges (network/streaming sources & sinks) is **in scope** and
+planned — see bead `feedme-m5c`. Built-in sources today are local.
 
 ## 🔭 Scope and Limits
 
-FeedMe's guarantees are precise but **narrow**. They hold for the model it actually
-implements — a single-process, single-threaded, local, ordered stream processor:
+FeedMe has a deliberately narrow lane: it is the **deterministic, bounded,
+sync-core data-plumbing layer** of the same architectural family as engines like
+`dzero-cas` and `mikedb` — linear and embeddable. It is the front door that turns
+messy input streams into clean, ordered facts for a downstream engine or any sink.
+It is *not* a relational/aggregation engine, a distributed system, or a daemon.
 
-- **Single-threaded**: one event is processed at a time, in input order. There is no
-  concurrency, parallelism, or async. Throughput scales with one core.
-- **Local input only**: sources are `stdin`, a single file, or a non-recursive
-  directory of files read into a sorted `Vec` of paths. No network, no remote
-  offsets, no distributed coordination.
-- **No backpressure**: input is read line-by-line and processed immediately; the
-  engine does not buffer unbounded input or apply flow control. "Bounded memory"
-  means per-event working state is flat, not that arbitrarily large inputs are
-  spooled.
-- **Out of scope**: networking, async runtimes, persistence, query languages, and
-  horizontal scaling. The "done once, done right" framing refers to correctness of
-  this local model, not to distributed or high-throughput deployment.
+Its guarantees hold for the model it actually implements — a single-process,
+local, ordered stream processor:
+
+- **Sync processing core**: the stage pipeline runs single-threaded and in input
+  order. This is a *feature*, not a limitation — it is the same architectural bet
+  serious sync engines make to guarantee determinism and bounded memory. There is
+  no concurrency inside the stage loop.
+- **Async only at the edges**: an `InputSource` / `OutputSink` may perform async
+  I/O (network, streaming). The pipeline *coordination* stays synchronous; async
+  never enters the stage loop. This is the planned path for Kafka/S3/HTTP
+  ingestion (bead `feedme-m5c`).
+- **Local input today**: built-in sources are `stdin`, a single file, or a
+  non-recursive directory of files read into a sorted `Vec` of paths. No remote
+  offsets or distributed coordination yet.
+- **No backpressure**: input is read and processed line-by-line; the engine does
+  not buffer unbounded input or apply flow control. "Bounded memory" means
+  per-event working state is flat, not that arbitrarily large inputs are spooled.
+- **Out of scope**: distributed processing, persistent storage, query languages,
+  compression/encryption, and relational aggregation/joins. The "done once, done
+  right" framing refers to correctness of this local model, not to distributed or
+  high-throughput deployment.
 - **Fuzzing needs nightly**: the `fuzz/` targets require a nightly toolchain and
   `cargo-fuzz` (see [Fuzzing](#fuzzing)).
 
