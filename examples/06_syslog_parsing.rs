@@ -1,5 +1,4 @@
 use feedme::*;
-use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parser trait is an extension point (not used by default InputSource, which

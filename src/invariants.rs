@@ -207,10 +207,10 @@ pub fn check_performance_regression(
 #[macro_export]
 macro_rules! assert_invariant {
     ($cond:expr, $msg:expr) => {
-        $crate::invariant_ppt::assert_invariant($cond, $msg, None)
+        $crate::invariants::assert_invariant($cond, $msg, None)
     };
     ($cond:expr, $msg:expr, $ctx:expr) => {
-        $crate::invariant_ppt::assert_invariant($cond, $msg, Some($ctx))
+        $crate::invariants::assert_invariant($cond, $msg, Some($ctx))
     };
 }
 

@@ -5,7 +5,7 @@
 ///
 /// The PptManager does this in four lines. Plug it into CI and your pipeline
 /// will tell you when something slows it down.
-use feedme::invariant_ppt::PptManager;
+use feedme::invariants::PptManager;
 use feedme::*;
 use serde_json::json;
 

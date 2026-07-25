@@ -83,17 +83,13 @@ No long-running services or auto-restart. FeedMe is a library you embed in your 
 
 **This focus enables FeedMe's core guarantees while keeping the codebase small and maintainable.**
 
-## Invariants
-
-FeedMe enforces **mechanical behavioral guarantees** that are tested via runtime assertions and contract tests. These invariants ensure reliability and prevent regressions.
-
 ## Installation
 
 Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-feedme = "0.2"
+feedme = "0.3"
 serde_json = "1.0"
 regex = "1.0"
 ```
@@ -280,7 +276,6 @@ FeedMe is designed for high-throughput, low-latency data processing:
 - **Bounded memory usage** — no unbounded buffering regardless of input size
 - **Efficient streaming** — minimal allocations with ownership transfer
 - **Zero-overhead observability** — metrics collection doesn't affect execution
-- **Horizontal scalability** — linear processing model scales across cores/processes
 
 ## 🛡️ Invariants
 
@@ -291,7 +286,7 @@ FeedMe enforces **mechanical behavioral guarantees** that are tested via runtime
 - **Latency recording**: Successful stage execution always records timing
 - **Directory determinism**: Same directory input produces identical output
 
-See [src/ppt_invariant_contracts.rs](src/ppt_invariant_contracts.rs) for the complete contract test suite.
+See [src/invariant_contracts.rs](src/invariant_contracts.rs) for the complete contract test suite.
 
 ## 🚫 Non-Goals
 

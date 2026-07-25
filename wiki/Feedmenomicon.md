@@ -120,7 +120,7 @@ feedme = { version = "0.2.0", features = ["invariant-ppt"] }
 ### PptManager
 
 ```rust
-use feedme::invariant_ppt::PptManager;
+use feedme::invariants::PptManager;
 
 let mut manager = PptManager::new();
 manager.establish_baseline(&pipeline)?;   // snapshot current metrics
@@ -202,7 +202,7 @@ feedme/
 ├── src/
 │   ├── lib.rs               # Core + replay_spec (unified structural)
 │   ├── fused.rs             # Single-pass
-│   ├── invariant_ppt.rs     # Guards
+│   ├── invariants.rs     # Guards
 │   ├── replay.rs            # Traces only
 │   ├── fault_injection.rs   # Test faults
 │   ├── audit.rs             # Attest/compliance
