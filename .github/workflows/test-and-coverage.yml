@@ -56,10 +56,12 @@ jobs:
 
     - name: 📈 Upload coverage to Codecov
       if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
+      continue-on-error: true
       uses: codecov/codecov-action@v4
       with:
         file: cobertura.xml
-        fail_ci_if_error: true
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 
     - name: 🔍 Run clippy
       run: cargo clippy --all-features --all-targets -- -D warnings
