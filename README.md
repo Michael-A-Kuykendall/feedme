@@ -336,6 +336,29 @@ cargo build
 cargo test
 ```
 
+### Fuzzing
+
+The `fuzz/` directory is a separate [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz)
+workspace. It is **excluded** from the main workspace and requires a **nightly**
+toolchain plus the `cargo-fuzz` subcommand:
+
+```bash
+# install the fuzzer harness (one time)
+cargo +nightly install cargo-fuzz
+
+# build all fuzz targets
+cargo +nightly fuzz build
+
+# run a target for a bounded number of executions
+cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
+```
+
+Fuzzing is exercised on CI by a non-blocking `nightly` job
+(`fuzz` job in `.github/workflows/test-and-coverage.yml`) that builds and
+smoke-runs the targets. Because it depends on nightly, a failure there does not
+gate merges — but it surfaces regressions early. Stable `cargo test`,
+clippy, and fmt remain the gates for correctness.
+
 ### Code of Conduct
 
 This project follows a code of conduct to ensure a welcoming environment for all contributors. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for details.

@@ -55,6 +55,22 @@ If a contribution is discussed and approved:
 - All public APIs must have documentation with examples
 - Platform-specific code properly abstracted in `/src/platform/`
 
+## Fuzzing
+
+FeedMe ships fuzz targets under `fuzz/` (a separate cargo-fuzz workspace, excluded
+from the main workspace). Running them locally requires the **nightly** toolchain
+and the `cargo-fuzz` subcommand:
+
+```bash
+cargo +nightly install cargo-fuzz
+cd fuzz
+cargo +nightly fuzz build
+cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
+```
+
+CI builds and smoke-runs these targets on a non-blocking `nightly` job so that
+fuzzing regressions are visible without gating stable merges.
+
 ## FeedMe Philosophy
 
 Any accepted work must align with:
