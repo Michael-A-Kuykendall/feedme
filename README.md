@@ -4,6 +4,8 @@
 
 <h1 align="center">FeedMe</h1>
 
+<p align="center"><b>Languages:</b> <a href="docs/zh-CN/README.md">简体中文</a> · <a href="docs/zh-TW/README.md">繁體中文</a></p>
+
 <p align="center">
   <strong>FeedMe is a deterministic, linear, streaming ingest pipeline with mechanical guarantees around memory, ordering, and failure.</strong>
 </p>
@@ -89,7 +91,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-feedme = "0.3"
+feedme = "0.4"
 serde_json = "1.0"
 regex = "1.0"
 ```

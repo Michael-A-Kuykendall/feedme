@@ -7,14 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### ✨ **Consolidated — one open-source crate**
-- Merged all previously separate feedme-pro features into the main `feedme` crate
-- All features are now 100% open source (Apache 2.0 / MIT)
-- Added `fault_injection` module: `FaultAwareStage`, `FaultInjector` — wrap any stage for controlled resilience testing
-- Added `audit` module: `AuditManager`, `AttestationBundle`, compliance policies — pipeline attestation and audit trail generation
-- Extended `invariant_ppt` with `PptManager`: performance baseline capture and latency/error-rate regression detection
-- Extended `replay` module with `ReplayManager`: pipeline spec serialization, A/B comparison, config drift detection
-- Removed `feedme-pro` workspace member and all `gatewarden` license-gate dependencies
+## [0.4.0] - 2026-07-25
+
+### ✨ Deficiencies & Audit Overhaul
+- Made `fused` and `invariant-ppt` Cargo features functional (they previously gated nothing)
+- Modularized `src/lib.rs` into focused modules (`pipeline`, `stages`, `input`, `metrics`, `invariants`, `audit`, `replay`, `fault_injection`, `fused`, `config`, `error`, `event`)
+- Hardened `PIIRedaction`: opt-in field targeting, recursive nested-value redaction, and idempotent re-redaction
+- Added `Pipeline::require_validation(true)` to enforce the validation guarantee fail-closed
+- Fuzzing documented as opt-in/local (cargo-fuzz on nightly); no nightly CI job runs automatically
+- Documented agent-generated provenance and the engine's single-threaded, local scope limits
+- Documentation/CI cruft fixes: removed a wrong-project template string, added `--all-targets` to the clippy gate, fixed hidden lint warnings, renamed `invariant_ppt`→`invariants` / `ppt_invariant_contracts`→`invariant_contracts`, and extracted the ~1700-line inline test module out of `lib.rs`
+- Added Simplified Chinese (`docs/zh-CN`) and Traditional Chinese (`docs/zh-TW`) documentation with a language switcher
+
+### 🔧 Previously in Unreleased (consolidation)
+- Merged all previously separate feedme-pro features into the main `feedme` crate; fully open source (Apache 2.0 / MIT)
+- Added `fault_injection` module (`FaultAwareStage`, `FaultInjector`)
+- Added `audit` module (`AuditManager`, `AttestationBundle`)
+- Added `PptManager` performance baseline / regression detection (now in the `invariants` module)
+- Extended `replay` module with `ReplayManager`
+- Removed `feedme-pro` workspace member and license-gate dependencies
 
 ## [0.3.0] - 2026-06-13
 
