@@ -68,8 +68,8 @@ cargo +nightly fuzz build
 cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 ```
 
-CI builds and smoke-runs these targets on a non-blocking `nightly` job so that
-fuzzing regressions are visible without gating stable merges.
+Fuzzing is **not** run automatically in CI — it is opt-in and local-only. Stable
+`cargo test`, clippy, and fmt remain the only CI gates.
 
 ## FeedMe Philosophy
 

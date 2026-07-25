@@ -383,11 +383,9 @@ cargo +nightly fuzz build
 cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 ```
 
-Fuzzing is exercised on CI by a non-blocking `nightly` job
-(`fuzz` job in `.github/workflows/test-and-coverage.yml`) that builds and
-smoke-runs the targets. Because it depends on nightly, a failure there does not
-gate merges — but it surfaces regressions early. Stable `cargo test`,
-clippy, and fmt remain the gates for correctness.
+Fuzzing is **not** run automatically in CI. It is an opt-in, local-only activity
+for contributors who want to stress the parsing/redaction boundary. Stable
+`cargo test`, clippy, and fmt remain the only CI gates for correctness.
 
 ### Code of Conduct
 
