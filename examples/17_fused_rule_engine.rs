@@ -1,17 +1,17 @@
 /// Example 17 — Fused Rule Engine (Selector-First Single-Pass)
 ///
 /// FeedMe's signature feature: O(M) evaluation independent of rule count.
-/// 
+///
 /// Conventional pipelines scan the event once per rule stage (O(N×M)).
 /// FusedRuleEngine scans ONCE and broadcasts each field to all rules that need it.
-/// 
+///
 /// This is the "selector-first" architecture — extract each field once,
 /// then apply ALL predicates that reference it. Runtime stays constant
 /// even as you add hundreds of rules sharing selectors.
 ///
 /// This is FSE (Fused Semantic Execution) — the core innovation that makes
 /// FeedMe different from every other pipeline library.
-use feedme::fused::{FusedRuleEngine, Rule, FailAction, FieldType};
+use feedme::fused::{FailAction, FieldType, FusedRuleEngine, Rule};
 use feedme::{Event, Pipeline};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -84,17 +84,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     println!("=== Fused Rule Engine Demo ===");
-    println!("Engine evaluates {} rules in a SINGLE pass over each event.\n", 6);
+    println!(
+        "Engine evaluates {} rules in a SINGLE pass over each event.\n",
+        6
+    );
 
     for (i, data) in test_cases.into_iter().enumerate() {
-        let event = Event { data, metadata: None };
+        let event = Event {
+            data,
+            metadata: None,
+        };
         let result = pipeline.process_event(event);
-        
+
         // Print what happened for each test case
         match &result {
             Ok(Some(out)) => println!("[{}] ✓ PASSED: {}", i + 1, out.data),
-            Ok(None) =>    println!("[{}] ✗ DROPPED (rule failed)", i + 1),
-            Err(e) =>      println!("[{}] ERROR: {}", i + 1, e),
+            Ok(None) => println!("[{}] ✗ DROPPED (rule failed)", i + 1),
+            Err(e) => println!("[{}] ERROR: {}", i + 1, e),
         }
     }
 
@@ -107,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The key insight: adding more rules doesn't slow down the pipeline
     // because all rules sharing selectors are evaluated in the same pass.
     // Try adding 100 more rules — the runtime stays O(M), not O(N×M).
-    
+
     println!("\n✓ FusedRuleEngine: O(1) per rule for shared selectors");
     println!("  Conventional pipeline: O(N) per rule (N = rule count)");
     println!("  This is FSE — selector-first architecture.");

@@ -113,6 +113,32 @@ jobs:
     - name: 🔒 Run security audit
       run: cargo audit
 
+  fuzz:
+    name: Fuzz Targets (nightly)
+    runs-on: ubuntu-latest
+    # Non-blocking: fuzzing requires nightly + cargo-fuzz and can be affected by
+    # nightly churn unrelated to stable correctness, so it does not gate merges.
+    continue-on-error: true
+    steps:
+    - name: ?? Checkout code
+      uses: actions/checkout@v4
+
+    - name: ?? Setup nightly Rust toolchain
+      uses: dtolnay/rust-toolchain@nightly
+
+    - name: ?? Install cargo-fuzz
+      run: cargo +nightly install cargo-fuzz
+
+    - name: ?? Build fuzz targets
+      working-directory: fuzz
+      run: cargo +nightly fuzz build
+
+    - name: ?? Smoke-run fuzz targets
+      working-directory: fuzz
+      run: |
+        cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
+        cargo +nightly fuzz run fuzz_target_1 -- -runs=1000
+
   publish-check:
     name: Publish Readiness Check
     runs-on: ubuntu-latest
