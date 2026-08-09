@@ -165,17 +165,25 @@ println!("Compliance score: {:.1}", report.compliance_score);
 
 ## Replay and Comparison
 
-`ReplayManager` records and compares pipeline specifications:
+`replay_spec::PipelineReplaySpec` serialises a pipeline's stages (including
+full stage config, not just names) and diffs two specs structurally — see
+[example 16](../examples/16_pipeline_evolution.rs) for a complete A/B walkthrough:
 
 ```rust
-use feedme::replay_spec::{PipelineReplaySpec, StageRegistry}; // structural specs (preferred)
-// replay.rs still provides ExecutionTrace for runtime determinism verification only.
+use feedme::replay_spec::{PipelineReplaySpec, StageRegistry};
 
-let mut manager = ReplayManager::new();
-manager.serialize_pipeline(&pipeline, "v1.0")?;
-let report = manager.generate_replay_report("v1.0", "v2.0")?;
-println!("Modified stages: {}", report.comparison.modified_stages);
+let registry = StageRegistry::new(); // register factories for your stages first
+let spec_v1 = PipelineReplaySpec::from_pipeline(&pipeline_v1, &registry)?;
+let spec_v2 = PipelineReplaySpec::from_pipeline(&pipeline_v2, &registry)?;
+
+let diff = spec_v1.diff(&spec_v2);
+println!("modified stages: {}", diff.modified_stages.len());
 ```
+
+`src::replay` (module, not the struct of the same historical name) separately
+provides `record_execution`/`replay_execution` for runtime determinism
+verification — recording an actual execution trace and replaying it to prove
+identical output, rather than comparing structural specs.
 
 ---
 

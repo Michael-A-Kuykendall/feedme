@@ -1,6 +1,6 @@
 # FeedMe
 
-**语言 / Languages:** [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [English](../../README.md)
+**简体中文** · [繁體中文](../zh-TW/README.md) · [English](../../README.md)
 
 > FeedMe 是一个**确定性的、线性的流式数据管道引擎**，围绕内存、顺序与失败处理提供机械性保证。
 
@@ -51,7 +51,7 @@ FeedMe 提供以下机械性保证：
 每个事件独立处理，阶段之间不共享可变状态。
 
 ### 不是异步优先（如许多现代 Rust 库）
-执行是同步、线性的。没有 async runtime。
+处理核心在设计上是同步的——这是一项特性，而非限制。异步仅保留给 I/O 边缘适配器（数据源/输出端）；它永远不会进入阶段（stage）循环（详见下方"适用范围与限制"）。
 
 ### 不是 DSL（如 Logstash）
 你用 Rust 编写阶段；没有单独的配置语言需要学习。
@@ -80,7 +80,7 @@ FeedMe 强制实施**机械性的行为保证**，通过运行时断言和契约
 
 ```toml
 [dependencies]
-feedme = "0.3"
+feedme = "0.5"
 serde_json = "1.0"
 regex = "1.0"
 ```
@@ -160,6 +160,8 @@ certutil -hashfile run1.out SHA256 && certutil -hashfile run2.out SHA256
 ```
 
 两次运行的哈希值应当一致。
+
+> **说明**：此流程验证的是已处理事件流。指标导出（`export_json_logs`/`export_prometheus`）的确定性已单独验证——它有自己的排序问题（阶段/丢弃原因条目的顺序），与事件输出顺序无关；详见 `src/tests.rs` 中的 `test_metrics_export_ordering_is_deterministic`。
 
 ---
 
@@ -246,12 +248,15 @@ cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 
 ## 适用范围与限制 (Scope and Limits)
 
-FeedMe 的保证是精确但**狭窄**的，仅适用于它实际实现的模型——单进程、单线程、本地、有序的流处理器：
+FeedMe 的定位是刻意收窄的：它是**确定性的、有界的、同步核心的数据管道库**——线性、可嵌入。它将杂乱的输入流转化为干净、有序事件，服务于下游系统或任意输出端。它*不是*关系型/聚合引擎、分布式系统，也不是守护进程。
 
-- **单线程**：一次处理一个事件，按输入顺序。没有并发、并行或 async。吞吐量受限于单个核心。
-- **仅本地输入**：来源为 `stdin`、单个文件或非递归目录（路径被读入一个有序的 `Vec`）。没有网络、没有远程 offset、没有分布式协调。
-- **无背压（backpressure）**：输入逐行读取并立即处理；引擎不缓冲无限输入，也不做流控。“有界内存”指每个事件的工作状态是平坦的，而非无限输入被分页落盘。
-- **范围之外**：网络、async runtime、持久化、查询语言与水平扩展。所谓“一次做对”指的是这一本地模型的正确性，而非分布式或高吞吐部署。
+其保证适用于它实际实现的模型——单进程、本地、有序的流处理器：
+
+- **同步处理核心**：阶段管道单线程运行，按输入顺序执行。这是一项**特性**，而非限制——这与成熟的同步引擎为保证确定性与有界内存所做的架构选择相同。阶段循环内部没有并发。
+- **仅在边缘使用异步**：实现 `InputSourceAdapter` 特质（trait）的类型，或实现 `OutputSink` 的 `Stage`，可以在内部执行异步 I/O（网络、流式传输）。管道*协调*部分保持同步；异步永远不会进入阶段循环。这是 Kafka/S3/HTTP 摄取功能计划使用的扩展点；具体的 trait 契约见 [`docs/decisions/0001-input-output-async-edges.md`](../decisions/0001-input-output-async-edges.md)。
+- **当前仅支持本地输入**：内置数据源为 `stdin`、单个文件，或非递归目录（路径被读入一个有序的 `Vec`）。目前尚无远程 offset 或分布式协调。
+- **无背压（backpressure）**：输入逐行读取并立即处理；引擎不缓冲无限输入，也不做流控。”有界内存”指每个事件的工作状态是平坦的，而非无限输入被分页落盘。
+- **范围之外**：分布式处理、持久化存储、查询语言、压缩/加密，以及关系型聚合/连接（多事件分析不在本库范围内）。“一次做对”指的是这一本地模型的正确性，而非分布式或高吞吐部署。
 - **模糊测试需要 nightly**：`fuzz/` 目标需要 nightly 工具链与 `cargo-fuzz`（见上文）。
 
 ---
@@ -292,4 +297,4 @@ cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 
 ## 许可证 (License)
 
-基于 MIT 许可证发布。详见 [LICENSE](../../LICENSE)。
+基于 MIT 或 Apache-2.0 双许可证发布，由你选择。详见 [LICENSE-MIT](../../LICENSE-MIT) / [LICENSE-APACHE](../../LICENSE-APACHE)。

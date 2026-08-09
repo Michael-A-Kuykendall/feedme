@@ -364,13 +364,18 @@ pub mod stages;
 pub use config::{common_redact_validate_pipeline, Config, PluginRegistry};
 pub use error::*;
 pub use event::Event;
-pub use input::{InputSource, JSONArrayParser, NDJSONParser, Parser, SyslogParser};
+pub use input::{
+    InputSource, InputSourceAdapter, JSONArrayParser, NDJSONParser, Parser, SyslogParser,
+};
 pub use metrics::{DropReason, LatencyStats, Metrics};
 pub use pipeline::{Pipeline, Stage};
 pub use stages::{
-    Deadletter, DerivedFields, FieldRemap, FieldSelect, FileOutput, Filter, PIIRedaction,
-    RequiredFields, StdoutOutput, TypeChecking, ValueConstraints,
+    Deadletter, DerivedFields, FieldRemap, FieldSelect, FileOutput, Filter, OutputSink,
+    PIIRedaction, RequiredFields, StdoutOutput, TypeChecking, ValueConstraints,
 };
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod proptests;

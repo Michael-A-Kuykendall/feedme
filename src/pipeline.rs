@@ -235,6 +235,22 @@ impl Pipeline {
         self.metrics.errors
     }
 
+    /// Returns the number of error records lost because the deadletter sink
+    /// itself failed to write them (disk full, permissions, etc.). Any
+    /// non-zero value here means records were lost beyond what an eprintln
+    /// captured — see [`Pipeline::record_deadletter_write_failure`].
+    pub fn deadletter_write_failures(&self) -> u64 {
+        self.metrics.deadletter_write_failures
+    }
+
+    /// Records that the deadletter sink itself failed to write an error
+    /// record. Called by [`crate::InputSource::process_input`] when a
+    /// deadletter write fails; exposed so custom input drivers outside
+    /// `InputSource` can report the same failure mode through `Metrics`.
+    pub fn record_deadletter_write_failure(&mut self) {
+        self.metrics.increment_deadletter_write_failure();
+    }
+
     /// Returns the average latency across all stages in milliseconds.
     ///
     /// This is a **true weighted mean**: total processing time divided by total

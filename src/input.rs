@@ -5,12 +5,45 @@ use serde_json;
 use std::fs;
 use std::io::{self, BufRead};
 use std::path::PathBuf;
+
+/// Extension point for input sources. Implement this directly for a new
+/// source (e.g. an async Kafka/S3/HTTP edge adapter, feedme-m5c) instead of
+/// adding a variant to the [`InputSource`] enum — the enum stays closed to
+/// the three built-in local sources so existing exhaustive matches on it
+/// never break.
+///
+/// `process_input`'s contract is synchronous: it returns only after the
+/// source is exhausted (or an error is hit), driving `pipeline.process_event`
+/// once per event, in order, exactly like the built-in sources do today. An
+/// async adapter satisfies this by bridging internally — e.g. an
+/// adapter-owned background task/thread pushes onto a bounded channel that
+/// this method drains synchronously — never by making the stage loop itself
+/// async. See docs/design_rationale.md, "Why a Synchronous Core (and Async
+/// Only at the Edges)".
+pub trait InputSourceAdapter {
+    fn process_input(
+        &mut self,
+        pipeline: &mut Pipeline,
+        deadletter: &mut Option<&mut dyn Stage>,
+    ) -> Result<(), PipelineError>;
+}
+
 /// Input sources: local, synchronous, stream-oriented, ordered read.
 /// No distributed offsets, no remote coordination.
 pub enum InputSource {
     Stdin,
     File(PathBuf),
     Directory(PathBuf), // non-recursive
+}
+
+impl InputSourceAdapter for InputSource {
+    fn process_input(
+        &mut self,
+        pipeline: &mut Pipeline,
+        deadletter: &mut Option<&mut dyn Stage>,
+    ) -> Result<(), PipelineError> {
+        InputSource::process_input(self, pipeline, deadletter)
+    }
 }
 
 impl InputSource {
@@ -46,7 +79,8 @@ impl InputSource {
                                     metadata: None,
                                 };
                                 if let Err(dl_err) = dl.execute(error_event) {
-                                    eprintln!("[feedme] deadletter write failed ΓÇö stdin parse error record lost: {}", dl_err);
+                                    pipeline.record_deadletter_write_failure();
+                                    eprintln!("[feedme] deadletter write failed - stdin parse error record lost: {}", dl_err);
                                 }
                             } else {
                                 return Err(PipelineError::Parse(ParseError {
@@ -74,7 +108,8 @@ impl InputSource {
                                     metadata: None,
                                 };
                                 if let Err(dl_err) = dl.execute(error_event) {
-                                    eprintln!("[feedme] deadletter write failed ΓÇö stdin pipeline error record lost: {}", dl_err);
+                                    pipeline.record_deadletter_write_failure();
+                                    eprintln!("[feedme] deadletter write failed - stdin pipeline error record lost: {}", dl_err);
                                 }
                             } else {
                                 return Err(e);
@@ -116,7 +151,8 @@ impl InputSource {
                                     metadata: None,
                                 };
                                 if let Err(dl_err) = dl.execute(error_event) {
-                                    eprintln!("[feedme] deadletter write failed ΓÇö file parse error record lost: {}", dl_err);
+                                    pipeline.record_deadletter_write_failure();
+                                    eprintln!("[feedme] deadletter write failed - file parse error record lost: {}", dl_err);
                                 }
                             } else {
                                 return Err(PipelineError::Parse(ParseError {
@@ -144,7 +180,8 @@ impl InputSource {
                                     metadata: None,
                                 };
                                 if let Err(dl_err) = dl.execute(error_event) {
-                                    eprintln!("[feedme] deadletter write failed ΓÇö file pipeline error record lost: {}", dl_err);
+                                    pipeline.record_deadletter_write_failure();
+                                    eprintln!("[feedme] deadletter write failed - file pipeline error record lost: {}", dl_err);
                                 }
                             } else {
                                 return Err(e);

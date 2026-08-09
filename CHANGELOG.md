@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-09
+
+### Metrics & Observability
+- `Metrics::stage_latencies` and `Metrics::drop_reasons` now use `BTreeMap` instead of `HashMap`, so `export_json_logs()`/`export_prometheus()` emit entries in a stable, key-sorted order on every run.
+- Added `Metrics::deadletter_write_failures`, `Pipeline::deadletter_write_failures()`, and a corresponding `deadletter_write_failures` entry in both `export_json_logs()` and `export_prometheus()` output, counting deadletter-sink write failures (e.g. disk full).
+- `AuditManager`'s `pipeline_hash` now hashes each stage's full configuration (name, stage ID, version, and serialized config via `Stage::to_replay_spec`), not just the stage type sequence. `AttestationBundle` gained a `fully_attested: bool` field (with `#[serde(default)]` for older attestation JSON) indicating whether every stage in the pipeline could be config-bound into the hash.
+- `Stage::to_replay_spec` is now implemented for `PIIRedaction`, `DerivedFields`, `Filter`, `TypeChecking`, `ValueConstraints`, `FileOutput`, `Deadletter`, `FieldRemap`, and `FusedRuleEngine`, so `PipelineReplaySpec::from_pipeline` supports pipelines using any of them.
+- README.md's Determinism Verification section now documents metrics-export ordering as a separately-verified property, alongside the existing processed-event determinism check.
+
+### Fixed
+- Fixed a text-encoding artifact in four deadletter-failure log messages in `src/input.rs`.
+- CI's publish-readiness job now targets `refs/heads/main` (was `refs/heads/master`); removed the unused `master`/`develop` triggers.
+- Added the missing `[[bench]]` entry (`harness = false`) for `benches/pipeline_benchmark.rs` in `Cargo.toml`, so `cargo bench` executes the suite.
+- Fixed the language-switcher links in `docs/zh-CN/README.md`/`docs/zh-TW/README.md`, and synced both translations' version pin and "Scope and Limits" section with the English README.
+- README.md's Contributing section now matches CONTRIBUTING.md's open-source/not-open-contribution policy.
+- README.md and CONTRIBUTING.md now state the dual MIT/Apache-2.0 license (matching `Cargo.toml`) and link to `LICENSE-MIT`/`LICENSE-APACHE`.
+- Removed stale `/src/camera.rs`, `/src/permissions.rs`, and `/src/platform/` references from `CODEOWNERS` and `CONTRIBUTING.md`.
+
+### Added
+- Property-based test suite (`src/proptests.rs`, using `proptest`): checks determinism, order preservation, `require_validation` fail-closed behavior, and metrics monotonicity across generated pipeline/event combinations. Includes a regression guard enumerating every built-in stage and asserting `Stage::to_replay_spec` is wired.
+- `fused_vs_naive_rule_count` benchmark (`benches/pipeline_benchmark.rs`): measures the Fused Rule Engine's runtime as rule count M grows, against a naive per-rule-`Filter`-stage baseline. Results in README.md "Performance".
+- `InputSourceAdapter` trait (`src/input.rs`): extension point for async edge adapters (Kafka/S3/HTTP). `InputSource` implements it directly; no change to existing callers. Design contract documented in `docs/decisions/0001-input-output-async-edges.md`.
+- `.github/FUNDING.yml` and `SPONSORS.md`.
+
+### Changed
+- **Breaking**: renamed `stages::Output` → `stages::OutputSink`, matching the name used in README.md/design_rationale.md for the async-edge counterpart to `InputSourceAdapter`.
+
+### Removed
+- **Breaking**: removed `replay::PipelineReplaySpec` / `ReplayStageSpec` / `ReplayManager` / `SpecDiff` / `SpecComparison` / `ReplayReport` / `SpecFingerprintReport` (`src/replay.rs`). Use `feedme::replay_spec::PipelineReplaySpec` instead, which is unaffected and covers the same functionality with full config hashing. `record_execution`/`replay_execution`/`ExecutionTrace` (execution-trace replay) are unaffected and remain in `src/replay.rs`.
+
 ## [0.4.0] - 2026-07-25
 
 ### ✨ Deficiencies & Audit Overhaul

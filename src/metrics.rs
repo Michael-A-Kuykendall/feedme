@@ -1,7 +1,7 @@
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum DropReason {
     Filtered,
 }
@@ -16,13 +16,23 @@ impl fmt::Display for DropReason {
 
 /// Metrics for observability: counters, latency summaries, drop reason codes.
 /// No execution feedback loops. Bounded storage.
+///
+/// `stage_latencies` and `drop_reasons` use `BTreeMap` (not `HashMap`) so that
+/// `to_json_logs`/`to_prometheus` iterate in a stable, key-sorted order —
+/// `HashMap`'s randomized per-process hasher would otherwise make exported
+/// metrics ordering vary run-to-run, breaking the crate's determinism guarantee.
 #[derive(Debug)]
 pub struct Metrics {
     pub(crate) events_processed: u64,
     pub(crate) events_dropped: u64,
     pub(crate) errors: u64,
-    pub(crate) stage_latencies: HashMap<String, LatencyStats>, // bounded stats
-    pub(crate) drop_reasons: HashMap<DropReason, u64>,         // bounded reasons
+    /// Records lost because the deadletter sink itself failed to write them
+    /// (e.g. disk full, permissions). This is the one path whose entire job
+    /// is "never lose an error record without a trace" — so a failure here
+    /// is counted rather than only logged to stderr.
+    pub(crate) deadletter_write_failures: u64,
+    pub(crate) stage_latencies: BTreeMap<String, LatencyStats>, // bounded stats
+    pub(crate) drop_reasons: BTreeMap<DropReason, u64>,         // bounded reasons
 }
 
 #[derive(Debug, Clone)]
@@ -67,8 +77,9 @@ impl Metrics {
             events_processed: 0,
             events_dropped: 0,
             errors: 0,
-            stage_latencies: HashMap::new(),
-            drop_reasons: HashMap::new(),
+            deadletter_write_failures: 0,
+            stage_latencies: BTreeMap::new(),
+            drop_reasons: BTreeMap::new(),
         }
     }
 
@@ -83,6 +94,12 @@ impl Metrics {
 
     pub fn increment_errors(&mut self) {
         self.errors += 1;
+    }
+
+    /// Records that the deadletter sink failed to write an error record,
+    /// which would otherwise be silently lost beyond an stderr line.
+    pub fn increment_deadletter_write_failure(&mut self) {
+        self.deadletter_write_failures += 1;
     }
 
     pub fn record_latency(&mut self, stage: &str, duration: f64) {
@@ -106,6 +123,13 @@ impl Metrics {
         ));
         output.push_str("# HELP feedme_errors_total Total errors\n");
         output.push_str(&format!("feedme_errors_total {}\n", self.errors));
+        output.push_str(
+            "# HELP feedme_deadletter_write_failures_total Error records lost because the deadletter sink itself failed to write\n",
+        );
+        output.push_str(&format!(
+            "feedme_deadletter_write_failures_total {}\n",
+            self.deadletter_write_failures
+        ));
         output.push_str("# HELP feedme_stage_latency_ms Stage latency in milliseconds\n");
         output.push_str("# TYPE feedme_stage_latency_ms gauge\n");
         for (stage, stats) in &self.stage_latencies {
@@ -159,6 +183,13 @@ impl Metrics {
             serde_json::json!({
                 "metric": "errors",
                 "value": self.errors
+            })
+            .to_string(),
+        );
+        logs.push(
+            serde_json::json!({
+                "metric": "deadletter_write_failures",
+                "value": self.deadletter_write_failures
             })
             .to_string(),
         );

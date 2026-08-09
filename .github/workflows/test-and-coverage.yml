@@ -2,9 +2,9 @@ name: 🦀 FeedMe CI - Tests & Coverage
 
 on:
   push:
-    branches: [ master, main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ master, main ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -119,7 +119,7 @@ jobs:
     name: Publish Readiness Check
     runs-on: ubuntu-latest
     needs: [test-and-coverage, coverage-enforcement]
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     
     steps:
     - name: 📦 Checkout code

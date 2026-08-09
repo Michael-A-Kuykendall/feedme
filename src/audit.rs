@@ -94,12 +94,13 @@ impl AuditManager {
         #[cfg(not(any(test, feature = "invariant-ppt")))]
         let health_issues: Vec<String> = Vec::new();
         let compliance_checks = self.run_compliance_checks(&metrics);
-        let pipeline_hash = compute_pipeline_hash(pipeline);
+        let (pipeline_hash, fully_attested) = compute_pipeline_hash(pipeline);
 
         let bundle = AttestationBundle {
             execution_id: execution_id.to_string(),
             timestamp: std::time::SystemTime::now(),
             pipeline_hash,
+            fully_attested,
             metrics: metrics.clone(),
             health_issues,
             evidence_hashes: Vec::new(),
@@ -250,7 +251,18 @@ impl Default for AuditManager {
 pub struct AttestationBundle {
     pub execution_id: String,
     pub timestamp: std::time::SystemTime,
+    /// SHA-256 over each stage's name, stage-id, version, and full
+    /// configuration (via `Stage::to_replay_spec`). Changes whenever the
+    /// pipeline's configured behavior changes, not only its stage sequence.
     pub pipeline_hash: String,
+    /// `false` if one or more stages in the pipeline don't implement
+    /// `Stage::to_replay_spec` -- those stages were hashed by name only, so
+    /// `pipeline_hash` does not fully bind to their configuration. Check this
+    /// before treating `pipeline_hash` as a complete configuration fingerprint.
+    /// Defaults to `false` when deserializing older attestation JSON that
+    /// predates this field.
+    #[serde(default)]
+    pub fully_attested: bool,
     pub metrics: AuditMetricsSnapshot,
     pub health_issues: Vec<String>,
     pub evidence_hashes: Vec<String>,
@@ -399,13 +411,40 @@ struct EvidenceBundle {
     attestation: AttestationBundle,
 }
 
-fn compute_pipeline_hash(pipeline: &crate::Pipeline) -> String {
+/// Hashes stage name AND full config (via `Stage::to_replay_spec`), so the
+/// attestation hash changes whenever a stage's *configuration* changes, not
+/// only when the stage-type sequence changes -- e.g. two `RequiredFields`
+/// stages with different field lists now hash differently. Returns the hash
+/// plus whether every stage in the pipeline was covered (`true`) or whether
+/// one or more stages don't implement `to_replay_spec` and were hashed by
+/// name only (`false`) -- see [`AttestationBundle::fully_attested`].
+fn compute_pipeline_hash(pipeline: &crate::Pipeline) -> (String, bool) {
     let mut hasher = Sha256::new();
-    for name in pipeline.stage_names() {
-        hasher.update(name.as_bytes());
+    let mut fully_attested = true;
+    for stage in &pipeline.stages {
+        hasher.update(stage.name().as_bytes());
+        hasher.update(b"|");
+        match stage.to_replay_spec() {
+            Some(spec) => {
+                hasher.update(spec.stage_id.as_bytes());
+                hasher.update(spec.stage_version.as_bytes());
+                // Canonical JSON of the config binds the hash to actual
+                // configured behavior, not just the stage's type.
+                let config_json = serde_json::to_string(&spec.config)
+                    .unwrap_or_else(|_| "<unserializable>".to_string());
+                hasher.update(config_json.as_bytes());
+            }
+            None => {
+                // Stage doesn't implement to_replay_spec: fall back to
+                // hashing by name only, and flag the bundle as partial so
+                // consumers know this stage's configuration isn't bound in.
+                fully_attested = false;
+                hasher.update(b"<unattested-config>");
+            }
+        }
         hasher.update(b"|");
     }
-    format!("{:x}", hasher.finalize())
+    (format!("{:x}", hasher.finalize()), fully_attested)
 }
 
 // Tests
@@ -430,6 +469,73 @@ mod tests {
             .unwrap();
         assert_eq!(bundle.execution_id, "test-exec");
         assert_eq!(bundle.attested_by, "FeedMe Audit Manager");
+        assert!(bundle.fully_attested); // empty pipeline: nothing unattested
+    }
+
+    /// Regression test for feedme-6il: pipeline_hash used to be computed from
+    /// stage TYPE NAMES ONLY (`pipeline.stage_names()`), so two pipelines
+    /// with the same stage-type sequence but different behavior (different
+    /// required fields here) produced an IDENTICAL attestation hash. It now
+    /// binds to each stage's full configuration via `to_replay_spec`.
+    #[test]
+    fn test_pipeline_hash_binds_to_stage_config_not_just_names() {
+        let mut manager = AuditManager::new();
+
+        let mut pipeline_a = crate::Pipeline::new();
+        pipeline_a.add_stage(Box::new(crate::RequiredFields::new(vec![
+            "field_a".to_string()
+        ])));
+
+        let mut pipeline_b = crate::Pipeline::new();
+        pipeline_b.add_stage(Box::new(crate::RequiredFields::new(vec![
+            "field_b".to_string()
+        ])));
+
+        let bundle_a = manager
+            .generate_attestation_bundle(&pipeline_a, "exec-a")
+            .unwrap();
+        let bundle_b = manager
+            .generate_attestation_bundle(&pipeline_b, "exec-b")
+            .unwrap();
+
+        // Same stage-type sequence ("RequiredFields"), different config
+        // (different required field) -> must now produce different hashes.
+        assert_ne!(bundle_a.pipeline_hash, bundle_b.pipeline_hash);
+        assert!(bundle_a.fully_attested);
+        assert!(bundle_b.fully_attested);
+    }
+
+    /// A minimal custom Stage (the kind a plugin author would write) that
+    /// does not implement `to_replay_spec` -- the common case for
+    /// third-party stages, since it defaults to `None` on the `Stage` trait.
+    struct UnattestedTestStage;
+
+    impl crate::Stage for UnattestedTestStage {
+        fn execute(
+            &mut self,
+            event: crate::Event,
+        ) -> Result<Option<crate::Event>, crate::PipelineError> {
+            Ok(Some(event))
+        }
+
+        fn name(&self) -> &str {
+            "UnattestedTestStage"
+        }
+    }
+
+    #[test]
+    fn test_pipeline_hash_flags_unattested_stages() {
+        let mut manager = AuditManager::new();
+        let mut pipeline = crate::Pipeline::new();
+        // All built-in stages implement to_replay_spec; a custom
+        // (third-party plugin) stage that doesn't is the realistic case
+        // where a bundle can't be fully config-bound.
+        pipeline.add_stage(Box::new(UnattestedTestStage));
+
+        let bundle = manager
+            .generate_attestation_bundle(&pipeline, "exec-partial")
+            .unwrap();
+        assert!(!bundle.fully_attested);
     }
 
     #[test]

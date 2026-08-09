@@ -393,6 +393,41 @@ fn test_input_source_file() {
     fs::remove_file(temp_file).unwrap();
 }
 
+/// Regression test for feedme-1cq: InputSource must be usable behind
+/// `dyn InputSourceAdapter` (the extension point future async edge adapters
+/// implement directly) with identical behavior to calling the inherent
+/// `InputSource::process_input` directly -- confirms the trait impl
+/// dispatches to the real implementation rather than recursing or no-op'ing.
+#[test]
+fn test_input_source_adapter_trait_object() {
+    use std::fs;
+    use std::io::Write;
+
+    fn run_via_trait_object(
+        source: &mut dyn InputSourceAdapter,
+        pipeline: &mut Pipeline,
+    ) -> Result<(), PipelineError> {
+        let mut none: Option<&mut dyn Stage> = None;
+        source.process_input(pipeline, &mut none)
+    }
+
+    let temp_file = "test_input_adapter_trait.ndjson";
+    let mut file = fs::File::create(temp_file).unwrap();
+    writeln!(file, r#"{{"level": "info"}}"#).unwrap();
+    writeln!(file, r#"{{"level": "warn"}}"#).unwrap();
+    drop(file);
+
+    let mut pipeline = Pipeline::new();
+    pipeline.add_stage(Box::new(StdoutOutput::new()));
+    let mut input = InputSource::File(temp_file.into());
+
+    let result = run_via_trait_object(&mut input, &mut pipeline);
+    assert!(result.is_ok());
+    assert_eq!(pipeline.events_processed(), 2);
+
+    fs::remove_file(temp_file).unwrap();
+}
+
 #[test]
 fn test_input_source_file_parse_error() {
     use std::fs;
@@ -410,6 +445,48 @@ fn test_input_source_file_parse_error() {
     assert!(result.is_err()); // fails on parse error when no deadletter
 
     // Cleanup
+    fs::remove_file(temp_file).unwrap();
+}
+
+/// Regression test for feedme-5qy: when the deadletter sink itself fails to
+/// write (e.g. its parent directory doesn't exist), that used to be reported
+/// only via eprintln! with no trace in `Metrics`. It's now counted so the
+/// failure is observable through the same surface as everything else.
+#[test]
+fn test_deadletter_write_failure_is_counted() {
+    use std::fs;
+    use std::io::Write;
+
+    let temp_file = "test_deadletter_write_failure_input.ndjson";
+    let mut file = fs::File::create(temp_file).unwrap();
+    writeln!(file, "not valid json").unwrap();
+    drop(file);
+
+    let mut pipeline = Pipeline::new();
+    pipeline.add_stage(Box::new(StdoutOutput::new()));
+    let mut input = InputSource::File(temp_file.into());
+
+    // Deadletter sink pointed at a path whose parent directory does not
+    // exist, so Deadletter::execute's OpenOptions::open fails every time.
+    let mut deadletter =
+        Deadletter::new("/definitely/not/a/real/directory/deadletter.ndjson".into());
+    let mut deadletter_opt: Option<&mut dyn Stage> = Some(&mut deadletter);
+
+    // The parse error on "not valid json" triggers a deadletter write
+    // attempt, which itself fails (bad path) — process_input still returns
+    // Ok because the parse error was "handled" by the (failing) deadletter.
+    let result = input.process_input(&mut pipeline, &mut deadletter_opt);
+    assert!(result.is_ok());
+    assert_eq!(pipeline.deadletter_write_failures(), 1);
+
+    let json_logs = pipeline.export_json_logs();
+    assert!(json_logs
+        .iter()
+        .any(|l| l.contains("deadletter_write_failures") && l.contains("\"value\":1")));
+    assert!(pipeline
+        .export_prometheus()
+        .contains("feedme_deadletter_write_failures_total 1"));
+
     fs::remove_file(temp_file).unwrap();
 }
 
@@ -1673,6 +1750,61 @@ fn test_pipeline_export_prometheus_metrics() {
     let prometheus = pipeline.export_prometheus();
     assert!(prometheus.contains("# HELP"));
     assert!(prometheus.contains("feedme_events_processed_total"));
+}
+
+/// Regression test for feedme-sq8: stage_latencies/drop_reasons used to be
+/// HashMap, whose randomized per-process hasher made to_json_logs()/
+/// to_prometheus() emit entries in a different order every run — breaking the
+/// "same input + config -> same output" determinism guarantee. Both now use
+/// BTreeMap, so multiple independently-built, identically-configured
+/// pipelines must always emit their stage-latency entries in the same
+/// (key-sorted) order, regardless of stage-registration or execution order.
+#[test]
+fn test_metrics_export_ordering_is_deterministic() {
+    fn build_and_run() -> (Vec<String>, String) {
+        let mut pipeline = Pipeline::new();
+        pipeline.add_stage(Box::new(FieldSelect::new(vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+        ])));
+        pipeline.add_stage(Box::new(Filter::new(Box::new(|_e: &Event| true))));
+        pipeline.add_stage(Box::new(StdoutOutput::new()));
+
+        for i in 0..5 {
+            pipeline
+                .process_event(Event {
+                    data: serde_json::json!({"a": i, "b": i, "c": i}),
+                    metadata: None,
+                })
+                .unwrap();
+        }
+
+        // Latency values are wall-clock and vary run to run; strip everything
+        // but the stage-name ordering, which is what HashMap iteration used
+        // to randomize.
+        let stage_order: Vec<String> = pipeline
+            .export_json_logs()
+            .into_iter()
+            .filter(|l| l.contains("stage_latencies"))
+            .map(|l| {
+                let v: serde_json::Value = serde_json::from_str(&l).unwrap();
+                v["stage"].as_str().unwrap().to_string()
+            })
+            .collect();
+
+        (stage_order, pipeline.export_prometheus())
+    }
+
+    let (order1, _) = build_and_run();
+    let (order2, _) = build_and_run();
+    let (order3, _) = build_and_run();
+
+    assert_eq!(order1, order2);
+    assert_eq!(order2, order3);
+    // BTreeMap over stage names => alphabetical, independent of pipeline
+    // registration order (FieldSelect, Filter, StdoutOutput) or execution order.
+    assert_eq!(order1, vec!["FieldSelect", "Filter", "StdoutOutput"]);
 }
 
 #[test]

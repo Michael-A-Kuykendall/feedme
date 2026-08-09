@@ -95,6 +95,10 @@ impl Stage for FieldRemap {
     fn name(&self) -> &str {
         "FieldRemap"
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Transform for FieldRemap {}
@@ -167,6 +171,10 @@ impl Stage for PIIRedaction {
 
     fn name(&self) -> &str {
         "PIIRedaction"
+    }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
     }
 }
 
@@ -250,6 +258,10 @@ impl Stage for DerivedFields {
     fn name(&self) -> &str {
         "DerivedFields"
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Transform for DerivedFields {}
@@ -295,6 +307,10 @@ impl Stage for Filter {
 
     fn name(&self) -> &str {
         "Filter"
+    }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
     }
 }
 
@@ -431,6 +447,10 @@ impl Stage for TypeChecking {
     fn is_validator(&self) -> bool {
         true
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Validator for TypeChecking {}
@@ -490,6 +510,10 @@ impl Stage for ValueConstraints {
     fn is_validator(&self) -> bool {
         true
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl Validator for ValueConstraints {}
@@ -516,7 +540,15 @@ impl replay_spec::ReplayableStage for ValueConstraints {
 
 /// Outputs: emit processed events to local or synchronous destinations with explicit failure semantics.
 /// Ordered write, bounded retry, no unbounded retry, no background flush.
-pub trait Output: Stage {}
+///
+/// This is the `OutputSink` extension point named in README.md and
+/// docs/design_rationale.md as the async-edge counterpart to
+/// [`crate::input::InputSourceAdapter`]. A future async sink (Kafka/S3/HTTP,
+/// feedme-m5c) implements `OutputSink` directly; its `Stage::execute` stays
+/// synchronous by bridging internally (e.g. pushing onto a bounded channel
+/// drained by an adapter-owned background task) rather than blocking the
+/// stage loop on network I/O.
+pub trait OutputSink: Stage {}
 
 pub struct StdoutOutput;
 
@@ -552,7 +584,7 @@ impl Stage for StdoutOutput {
     }
 }
 
-impl Output for StdoutOutput {}
+impl OutputSink for StdoutOutput {}
 
 impl replay_spec::ReplayableStage for StdoutOutput {
     fn stage_id() -> replay_spec::StageId {
@@ -644,9 +676,13 @@ impl Stage for FileOutput {
     fn is_output(&self) -> bool {
         true
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
-impl Output for FileOutput {}
+impl OutputSink for FileOutput {}
 
 impl replay_spec::ReplayableStage for FileOutput {
     fn stage_id() -> replay_spec::StageId {
@@ -730,9 +766,13 @@ impl Stage for Deadletter {
     fn is_output(&self) -> bool {
         true
     }
+
+    fn to_replay_spec(&self) -> Option<replay_spec::StageSpec> {
+        Some(<Self as replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
-impl Output for Deadletter {}
+impl OutputSink for Deadletter {}
 
 impl replay_spec::ReplayableStage for Deadletter {
     fn stage_id() -> replay_spec::StageId {

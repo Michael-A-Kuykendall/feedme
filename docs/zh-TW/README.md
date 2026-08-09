@@ -1,6 +1,6 @@
 # FeedMe
 
-**語言 / Languages:** [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [English](../../README.md)
+[简体中文](../zh-CN/README.md) · **繁體中文** · [English](../../README.md)
 
 > FeedMe 是一個**確定性的、線性的串流資料管線引擎**，圍繞記憶體、順序與失敗處理提供機械性保證。
 
@@ -51,7 +51,7 @@ FeedMe 提供以下機械性保證：
 每個事件獨立處理，階段之間不共享可變狀態。
 
 ### 不是非同步優先（如許多現代 Rust 函式庫）
-執行是同步、線性的。沒有 async runtime。
+處理核心在設計上是同步的——這是一項特性，而非限制。非同步僅保留給 I/O 邊緣配接器（資料來源/輸出端）；它永遠不會進入階段（stage）迴圈（詳見下方「適用範圍與限制」）。
 
 ### 不是 DSL（如 Logstash）
 你用 Rust 撰寫階段；沒有需要學習的單獨組態語言。
@@ -80,7 +80,7 @@ FeedMe 強制實施**機械性的行為保證**，透過執行期斷言與契約
 
 ```toml
 [dependencies]
-feedme = "0.3"
+feedme = "0.5"
 serde_json = "1.0"
 regex = "1.0"
 ```
@@ -160,6 +160,8 @@ certutil -hashfile run1.out SHA256 && certutil -hashfile run2.out SHA256
 ```
 
 兩次執行的雜湊值應當一致。
+
+> **說明**：此流程驗證的是已處理事件流。指標匯出（`export_json_logs`/`export_prometheus`）的確定性已單獨驗證——它有自己的排序問題（階段/丟棄原因條目的順序），與事件輸出順序無關；詳見 `src/tests.rs` 中的 `test_metrics_export_ordering_is_deterministic`。
 
 ---
 
@@ -246,12 +248,15 @@ cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 
 ## 適用範圍與限制 (Scope and Limits)
 
-FeedMe 的保證是精確但**狹窄**的，僅適用於它實際實作的模型——單行程、單執行緒、本機、有序的串流處理器：
+FeedMe 的定位是刻意收窄的：它是**確定性的、有界的、同步核心的資料管線庫**——線性、可嵌入。它將雜亂的輸入流轉化為乾淨、有序事件，服務於下游系統或任意輸出端。它*不是*關聯式/聚合引擎、分散式系統，也不是常駐服務。
 
-- **單執行緒**：一次處理一個事件，依輸入順序。沒有並發、平行或 async。吞吐量受限於單一核心。
-- **僅本機輸入**：來源為 `stdin`、單一檔案或非遞歸目錄（路徑被讀入一個有序的 `Vec`）。沒有網路、沒有遠端 offset、沒有分散式協調。
+其保證適用於它實際實作的模型——單行程、本機、有序的串流處理器：
+
+- **同步處理核心**：階段管線單執行緒運行，依輸入順序執行。這是一項**特性**，而非限制——這與成熟的同步引擎為保證確定性與有界記憶體所做的架構選擇相同。階段迴圈內部沒有並發。
+- **僅在邊緣使用非同步**：實作 `InputSourceAdapter` 特徵（trait）的型別，或實作 `OutputSink` 的 `Stage`，可以在內部執行非同步 I/O（網路、串流傳輸）。管線*協調*部分維持同步；非同步永遠不會進入階段迴圈。這是 Kafka/S3/HTTP 擷取功能計畫使用的擴充點；具體的 trait 契約見 [`docs/decisions/0001-input-output-async-edges.md`](../decisions/0001-input-output-async-edges.md)。
+- **目前僅支援本機輸入**：內建資料來源為 `stdin`、單一檔案，或非遞歸目錄（路徑被讀入一個有序的 `Vec`）。目前尚無遠端 offset 或分散式協調。
 - **無背壓（backpressure）**：輸入逐行讀取並立即處理；引擎不緩衝無限輸入，也不做流控。「有界記憶體」指每個事件的工作狀態是平坦的，而非無限輸入被分頁落盤。
-- **範圍之外**：網路、async runtime、持久化、查詢語言與水平擴充。所謂「一次做對」指的是這一本地模型的正確性，而非分散式或高吞吐部署。
+- **範圍之外**：分散式處理、持久化儲存、查詢語言、壓縮/加密，以及關聯式聚合/連接（多事件分析不在本庫範圍內）。「一次做對」指的是這一本地模型的正確性，而非分散式或高吞吐部署。
 - **模糊測試需要 nightly**：`fuzz/` 目標需要 nightly 工具鏈與 `cargo-fuzz`（見上文）。
 
 ---
@@ -292,4 +297,4 @@ cargo +nightly fuzz run fuzz_pipeline -- -runs=1000
 
 ## 授權 (License)
 
-基於 MIT 授權發佈。詳見 [LICENSE](../../LICENSE)。
+基於 MIT 或 Apache-2.0 雙授權發佈，由你選擇。詳見 [LICENSE-MIT](../../LICENSE-MIT) / [LICENSE-APACHE](../../LICENSE-APACHE)。

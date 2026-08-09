@@ -577,6 +577,10 @@ impl Stage for FusedRuleEngine {
     fn name(&self) -> &str {
         &self.name
     }
+
+    fn to_replay_spec(&self) -> Option<crate::replay_spec::StageSpec> {
+        Some(<Self as crate::replay_spec::ReplayableStage>::to_spec(self))
+    }
 }
 
 impl crate::replay_spec::ReplayableStage for FusedRuleEngine {

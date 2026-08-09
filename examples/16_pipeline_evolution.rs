@@ -3,7 +3,7 @@
 /// You refactor your pipeline — add a stage, rename one, remove another.
 /// How do you know what changed between the deployed version and the new one?
 ///
-/// ReplayManager serialises pipeline specs and diffs them structurally.
+/// `PipelineReplaySpec` serialises pipeline specs and diffs them structurally.
 /// Plug this into your deployment pipeline to catch accidental changes
 /// before they reach production.
 use feedme::replay_spec::{PipelineReplaySpec, StageRegistry};

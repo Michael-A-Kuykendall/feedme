@@ -6,7 +6,7 @@ Thank you for your interest in FeedMe! 🚀
 
 FeedMe is **open source** but **not open contribution**.
 
-- The code is freely available under the MIT license
+- The code is freely available under MIT or Apache-2.0, at your option
 - You can fork, modify, use, and learn from it without restriction
 - **Pull requests are not accepted by default**
 - All architectural, roadmap, and merge decisions are made by the project maintainer
@@ -53,7 +53,7 @@ If a contribution is discussed and approved:
 - Rust 2021 edition with `cargo fmt` and `cargo clippy`
 - Comprehensive error handling using `Result<T, PipelineError>`
 - All public APIs must have documentation with examples
-- Platform-specific code properly abstracted in `/src/platform/`
+- New invariants get a property test in `src/proptests.rs`, not just a hand-written example
 
 ## Fuzzing
 

@@ -4,7 +4,7 @@ exclude = ["fuzz"]
 
 [package]
 name = "feedme"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Deterministic streaming pipeline engine with FSE (selector-first single-pass rule evaluation), fault injection, baseline regression detection, audit attestation, and pipeline evolution tracking."
@@ -23,7 +23,15 @@ exclude = [
     ".claude/",
     ".copilot/",
     "**/.claude/",
-    "**/.copilot/"
+    "**/.copilot/",
+    "opencode-session-*.md",
+    "session-*.md",
+    "session-ses_*.md",
+    "AGENTS.md",
+    "Agents.md",
+    "AUDIT.md",
+    ".beads/",
+    "target/",
 ]
 
 [dependencies]
@@ -53,6 +61,7 @@ fused = []
 [dev-dependencies]
 criterion = "0.8.1"
 tempfile = "3.0"
+proptest = "1.0"
 
 [[example]]
 name = "01_redact_validate_deadletter"
@@ -142,3 +151,9 @@ path = "examples/21_common_pipeline.rs"
 [[example]]
 name = "99_failure_tour"
 path = "examples/99_failure_tour.rs"
+
+[[bench]]
+name = "pipeline_benchmark"
+path = "benches/pipeline_benchmark.rs"
+harness = false
+required-features = ["fused"]
